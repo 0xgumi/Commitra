@@ -48,11 +48,17 @@ not a substitute for production deployment.
 
 ## Can the coordinator manipulate results?
 
-No.
+The coordinator cannot:
+- Fabricate votes
+- Alter valid vote contents
+- Change the final tally without detection
 
-While the coordinator orchestrates execution,
-it cannot alter valid outcomes or fabricate votes
-without detection.
+However, in v1.5 the coordinator can:
+- Choose not to include a vote (censorship)
+- Delay finalization
+
+These limitations are addressed in v2
+via threshold cryptography and distributed coordination.
 
 ---
 

@@ -70,6 +70,18 @@ and smart contract verification.
 
 ---
 
+## What the coordinator can do (but is detectable or bounded)
+
+- **Censorship**: The coordinator may choose not to include a submitted vote.
+  However, users can detect non-inclusion by checking on-chain records.
+
+- **Delay**: The coordinator may delay finalization.
+  This affects liveness, not correctness.
+
+These capabilities are removed in v2 via distributed coordination.
+
+---
+
 ## Limitations
 
 The following are known and accepted limitations of v1.5:
