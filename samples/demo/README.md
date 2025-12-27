@@ -7,6 +7,7 @@ and community members to **interactively verify** Commitra’s
 zero-knowledge voting system **without accessing private code**.
 
 At the time of writing, no demo transactions are included yet.
+_As of this release, the demo has not yet been exercised by external participants._
 This is intentional.
 
 ---
