@@ -52,3 +52,16 @@
 3. Check for `TallyFinalized` event in logs
 4. Verify recorded result matches the event parameters
 5. Confirm tally was submitted after voting was closed
+
+---
+
+## Visual reference (Etherscan)
+
+The image below shows the `TallyFinalized` event
+as displayed in a standard Ethereum block explorer.
+
+This image is provided as a **visual reference only**.
+The authoritative source of verification remains
+the transaction link and emitted event logs.
+
+![Etherscan tally event log](./images/tally-event-log-product.png)
