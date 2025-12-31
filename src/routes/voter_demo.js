@@ -1,0 +1,815 @@
+// const express = require("express");
+// const router = express.Router();
+// const db = require("../db/db");
+// const circomlib = require("circomlibjs");
+// const { votingContract, getNextVotingContract } = require("../config/onchain");
+// const fs = require("fs");
+
+// let poseidon, F;
+
+// (async () => {
+//   poseidon = await circomlib.buildPoseidon();
+//   F = poseidon.F;
+//   console.log("✓ Poseidon initialized");
+// })();
+
+// const ZERO = "0x" + "0".repeat(64);
+// const DEPTH = 15;
+
+// // =====================================
+// // 데모 설정
+// // =====================================
+// const DEMO_VOTE_ID = 1;
+
+// function getRandomWeight() {
+//   return Math.floor(Math.random() * 100) + 1; // 1 ~ 100
+// }
+
+// // =====================================
+// // DB Helper — leaf 리스트 불러오기
+// // =====================================
+// function loadLeavesFromDB(voteId) {
+//   const rows = db.prepare(
+//     "SELECT leaf FROM leaf_data WHERE voteId = ? ORDER BY leafIndex ASC"
+//   ).all(voteId);
+//   return rows.map(r => r.leaf);
+// }
+
+// // =====================================
+// // Poseidon Hash (2-input)
+// // =====================================
+// function poseidonHash(a, b) {
+//   return (
+//     "0x" +
+//     BigInt(F.toString(poseidon([BigInt(a), BigInt(b)])))
+//       .toString(16)
+//       .padStart(64, "0")
+//   );
+// }
+
+// // =====================================
+// // Merkle Tree Builder
+// // =====================================
+// function buildMerkleTree(leaves, depth = DEPTH) {
+//   if (leaves.length === 0) return { layers: [], root: ZERO };
+
+//   const layers = [];
+//   layers.push([...leaves]);
+
+//   for (let level = 0; level < depth; level++) {
+//     const current = layers[level];
+//     const next = [];
+
+//     for (let i = 0; i < current.length; i += 2) {
+//       const left = current[i];
+//       const right = current[i + 1] ?? ZERO;
+//       next.push(poseidonHash(left, right));
+//     }
+
+//     if (next.length === 0) next.push(ZERO);
+//     layers.push(next);
+//   }
+
+//   return { layers, root: layers[depth][0] };
+// }
+
+// // =====================================
+// // Merkle Path 생성
+// // =====================================
+// function getMerklePath(layers, leafIndex) {
+//   const pathElements = [];
+//   const pathIndices = [];
+//   let idx = leafIndex;
+
+//   for (let level = 0; level < layers.length - 1; level++) {
+//     const layer = layers[level];
+//     const isLeft = idx % 2 === 0;
+//     const siblingIndex = isLeft ? idx + 1 : idx - 1;
+//     const sibling = siblingIndex < layer.length ? layer[siblingIndex] : ZERO;
+
+//     pathElements.push(BigInt(sibling).toString());
+//     pathIndices.push(isLeft ? 0 : 1);
+//     idx = Math.floor(idx / 2);
+//   }
+
+//   return { pathElements, pathIndices };
+// }
+
+// // =====================================
+// // 1) Snapshot weight lookup (데모: 없으면 동적 생성)
+// // =====================================
+// router.post("/weight", (req, res) => {
+//   try {
+//     const { eoa } = req.body;
+//     if (!eoa) return res.status(400).json({ error: "Missing eoa" });
+
+//     const lowerEoa = eoa.toLowerCase();
+//     let row = db.prepare(
+//       "SELECT * FROM snapshot WHERE eoa = ?"
+//     ).get(lowerEoa);
+
+//     // 데모: 없으면 랜덤 weight로 자동 등록
+//     if (!row) {
+//       const weight = getRandomWeight();
+//       db.prepare(
+//         "INSERT INTO snapshot (eoa, weight) VALUES (?, ?)"
+//       ).run(lowerEoa, weight);
+      
+//       console.log(`✓ Demo: New EOA registered with weight ${weight}:`, lowerEoa);
+      
+//       return res.json({ status: "ok", weight: weight.toString() });
+//     }
+
+//     return res.json({ status: "ok", weight: row.weight.toString() });
+//   } catch (err) {
+//     console.error(err);
+//     return res.status(500).json({ error: "server error" });
+//   }
+// });
+
+// // =====================================
+// // 2) Leaf 등록 (eoa 저장 안 함)
+// // =====================================
+// router.post("/leaf", async (req, res) => {
+//   try {
+//     const { voteId, leaf } = req.body;
+
+//     if (!voteId || !leaf)
+//       return res.status(400).json({ error: "Missing voteId or leaf" });
+
+//     // 이미 등록된 leaf인지 확인
+//     const existing = db.prepare(
+//       "SELECT leafIndex, root, pathElements, pathIndices FROM leaf_data WHERE voteId = ? AND leaf = ?"
+//     ).get(voteId, leaf);
+
+//     if (existing) {
+//       // 이미 등록됨 → 기존 데이터 반환 (변경 없음)
+//       return res.json({
+//         status: "ok",
+//         leaf,
+//         leafIndex: existing.leafIndex,
+//         root: existing.root,
+//         pathElements: JSON.parse(existing.pathElements),
+//         pathIndices: JSON.parse(existing.pathIndices),
+//         txHash: null  // 이미 등록된 경우 txHash 없음
+//       });
+//     }
+
+//     // 새 leaf → leafIndex 할당
+//     const count = db.prepare(
+//       "SELECT COUNT(*) AS c FROM leaf_data WHERE voteId = ?"
+//     ).get(voteId).c;
+
+//     // 데모 인원 제한: 80명
+//     if (count >= 80) {
+//       return res.status(400).json({ error: "Demo limit reached: maximum 80 voters" });
+//     }
+
+//     const leafIndex = count;
+
+//     // 전체 leaves + 새 leaf로 머클 트리 생성
+//     const existingLeaves = loadLeavesFromDB(voteId);
+//     const allLeaves = [...existingLeaves, leaf];
+//     const { layers, root } = buildMerkleTree(allLeaves, DEPTH);
+
+//     // 새 leaf의 path만 계산
+//     const { pathElements, pathIndices } = getMerklePath(layers, leafIndex);
+
+//     // 새 leaf 저장 (기존 leaf는 건드리지 않음)
+//     db.prepare(
+//       "INSERT INTO leaf_data (voteId, leaf, leafIndex, root, pathElements, pathIndices) VALUES (?, ?, ?, ?, ?, ?)"
+//     ).run(voteId, leaf, leafIndex, root, JSON.stringify(pathElements), JSON.stringify(pathIndices));
+
+//     // root_history에 저장
+//     db.prepare(
+//       "INSERT OR IGNORE INTO root_history (voteId, root) VALUES (?, ?)"
+//     ).run(voteId, root);
+
+//     // 온체인 루트 업데이트
+//     let txHash = null;
+//     try {
+//       const currentRoot = await votingContract.currentRoot(voteId);
+//       if (currentRoot.toLowerCase() !== root.toLowerCase()) {
+//         const contract = getNextVotingContract();
+//         const tx = await contract.updateRoot(voteId, root);
+//         await tx.wait();
+//         txHash = tx.hash;
+//         console.log("✓ Root updated on-chain:", root, "txHash:", txHash);
+//       }
+//     } catch (err) {
+//       console.error("On-chain update error:", err);
+//     }
+
+//     console.log("✓ New leaf registered, index:", leafIndex);
+
+//     return res.json({
+//       status: "ok",
+//       leaf,
+//       leafIndex,
+//       root,
+//       pathElements,
+//       pathIndices,
+//       txHash
+//     });
+
+//   } catch (err) {
+//     console.error("leaf insert error:", err);
+//     return res.status(500).json({ error: "server error" });
+//   }
+// });
+
+// // =====================================
+// // 3) Merkle Proof 조회 (leaf로 조회, eoa 없음)
+// // =====================================
+// router.post("/proof", (req, res) => {
+//   try {
+//     const { voteId, leaf } = req.body;
+
+//     if (!voteId || !leaf)
+//       return res.status(400).json({ error: "Missing voteId or leaf" });
+
+//     const row = db.prepare(
+//       "SELECT leafIndex, root, pathElements, pathIndices FROM leaf_data WHERE voteId = ? AND leaf = ?"
+//     ).get(voteId, leaf);
+
+//     if (!row)
+//       return res.status(404).json({ error: "Leaf not found" });
+
+//     return res.json({
+//       status: "ok",
+//       leaf,
+//       leafIndex: row.leafIndex,
+//       root: row.root,
+//       pathElements: JSON.parse(row.pathElements),
+//       pathIndices: JSON.parse(row.pathIndices)
+//     });
+
+//   } catch (err) {
+//     console.error("proof error:", err);
+//     return res.status(500).json({ error: "server error" });
+//   }
+// });
+
+// // =====================================
+// // 4) Root 유효성 검증
+// // =====================================
+// router.post("/verify-root", (req, res) => {
+//   try {
+//     const { voteId, root } = req.body;
+
+//     if (!voteId || !root)
+//       return res.status(400).json({ error: "Missing voteId or root" });
+
+//     const row = db.prepare(
+//       "SELECT * FROM root_history WHERE voteId = ? AND root = ?"
+//     ).get(voteId, root);
+
+//     return res.json({
+//       status: "ok",
+//       valid: !!row
+//     });
+
+//   } catch (err) {
+//     console.error("verify-root error:", err);
+//     return res.status(500).json({ error: "server error" });
+//   }
+// });
+
+// router.get("/coordinator-key", (req, res) => {
+//   try {
+//     const pubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);
+//     res.json({ pubkey });
+//   } catch (err) {
+//     console.error("coordinator-key error:", err);
+//     res.status(500).json({ error: "Failed to load coordinator key" });
+//   }
+// });
+
+// // =====================================
+// // 5) 투표 제출 (proof 수신)
+// // =====================================
+// router.post("/submit-vote", async (req, res) => {
+//   try {
+//     const { pa, pb, pc, publicSignals, encryptedVotes } = req.body;
+
+//     if (!pa || !pb || !pc || !publicSignals || !encryptedVotes) {
+//       return res.status(400).json({ error: "Missing proof data" });
+//     }
+
+//     const merkleRoot = "0x" + BigInt(publicSignals[0]).toString(16).padStart(64, "0");
+//     const voteId = publicSignals[4];
+    
+//     const isValidRoot = await votingContract.isValidRoot(voteId, merkleRoot);
+    
+//     if (!isValidRoot) {
+//       return res.status(400).json({ error: "Invalid merkleRoot - not registered on-chain. Please wait a few seconds and try again." });
+//     }
+
+//     const nullifier = publicSignals[2];
+
+//     // nullifier 중복 체크
+//     const existingNullifier = db.prepare(
+//       "SELECT * FROM used_nullifiers WHERE voteId = ? AND nullifier = ?"
+//     ).get(voteId, nullifier);    
+
+//     if (existingNullifier) {
+//       return res.status(400).json({ error: "Nullifier already used - you have already voted." });
+//     }
+
+//     console.log("=== 투표 제출 수신 ===");
+//     console.log("pa:", JSON.stringify(pa));
+//     console.log("pb:", JSON.stringify(pb));
+//     console.log("pc:", JSON.stringify(pc));
+//     console.log("publicSignals:", JSON.stringify(publicSignals));
+//     console.log("nullifier:", nullifier);
+
+//     // on-chain 제출
+//     const contract = getNextVotingContract();
+//     const tx = await contract.submitVote(pa, pb, pc, publicSignals);
+//     const receipt = await tx.wait();
+
+//     // 성공 시 nullifier 저장
+//     db.prepare(
+//       "INSERT INTO used_nullifiers (nullifier, voteId, txHash) VALUES (?, ?, ?)"
+//     ).run(nullifier, voteId, tx.hash);
+
+//     console.log("✓ Vote submitted on-chain, tx:", tx.hash);
+//     console.log("✓ Nullifier saved to DB");
+
+//     // encryptedVotesHash 계산
+//     const flat = [];
+//     for (let choice = 0; choice < 3; choice++) {
+//       for (let c = 0; c < 2; c++) {
+//         for (let coord = 0; coord < 2; coord++) {
+//           flat.push(BigInt(encryptedVotes[choice][c][coord]));
+//         }
+//       }
+//     }
+//     const encryptedVotesHash = F.toObject(poseidon(flat)).toString();
+
+//     // 성공 시 encryptedVotes + encryptedVotesHash 저장
+//     db.prepare(
+//       "INSERT INTO permits (voteId, encryptedVotes, encryptedVotesHash) VALUES (?, ?, ?)"
+//     ).run(voteId, JSON.stringify(encryptedVotes), encryptedVotesHash);
+
+//     console.log("✓ EncryptedVotes saved to permits");
+
+//     return res.json({
+//       status: "ok",
+//       txHash: tx.hash,
+//       blockNumber: receipt.blockNumber,
+//       nullifier
+//     });
+
+//   } catch (err) {
+//     console.error("submit-vote error:", err);
+//     return res.status(500).json({ error: err.message || "server error" });
+//   }
+// });
+
+// module.exports = router;
+
+const express = require("express");
+const router = express.Router();
+const db = require("../db/db");
+const circomlib = require("circomlibjs");
+const { votingContract, getNextVotingContract } = require("../config/onchain");
+
+let poseidon, F;
+
+(async () => {
+  poseidon = await circomlib.buildPoseidon();
+  F = poseidon.F;
+  console.log("✓ Poseidon initialized");
+})();
+
+const ZERO = "0x" + "0".repeat(64);
+const DEPTH = 15;
+const MAX_VOTERS = 80; // Demo limit
+
+// =====================================
+// Helper: Random weight for demo
+// =====================================
+function getRandomWeight() {
+  return Math.floor(Math.random() * 100) + 1; // 1 ~ 100
+}
+
+// =====================================
+// DB Helper - Load leaf list
+// =====================================
+function loadLeavesFromDB(voteId) {
+  const rows = db.prepare(
+    "SELECT leaf FROM leaf_data WHERE voteId = ? ORDER BY leafIndex ASC"
+  ).all(voteId);
+  return rows.map(r => r.leaf);
+}
+
+// =====================================
+// Poseidon Hash (2-input)
+// =====================================
+function poseidonHash(a, b) {
+  return (
+    "0x" +
+    BigInt(F.toString(poseidon([BigInt(a), BigInt(b)])))
+      .toString(16)
+      .padStart(64, "0")
+  );
+}
+
+// =====================================
+// Merkle Tree Builder
+// =====================================
+function buildMerkleTree(leaves, depth = DEPTH) {
+  if (leaves.length === 0) return { layers: [], root: ZERO };
+
+  const layers = [];
+  layers.push([...leaves]);
+
+  for (let level = 0; level < depth; level++) {
+    const current = layers[level];
+    const next = [];
+
+    for (let i = 0; i < current.length; i += 2) {
+      const left = current[i];
+      const right = current[i + 1] ?? ZERO;
+      next.push(poseidonHash(left, right));
+    }
+
+    if (next.length === 0) next.push(ZERO);
+    layers.push(next);
+  }
+
+  return { layers, root: layers[depth][0] };
+}
+
+// =====================================
+// Merkle Path Generator
+// =====================================
+function getMerklePath(layers, leafIndex) {
+  const pathElements = [];
+  const pathIndices = [];
+  let idx = leafIndex;
+
+  for (let level = 0; level < layers.length - 1; level++) {
+    const layer = layers[level];
+    const isLeft = idx % 2 === 0;
+    const siblingIndex = isLeft ? idx + 1 : idx - 1;
+    const sibling = siblingIndex < layer.length ? layer[siblingIndex] : ZERO;
+
+    pathElements.push(BigInt(sibling).toString());
+    pathIndices.push(isLeft ? 0 : 1);
+    idx = Math.floor(idx / 2);
+  }
+
+  return { pathElements, pathIndices };
+}
+
+// =====================================
+// 1) Snapshot weight lookup (Demo: auto-register with random weight)
+// =====================================
+router.post("/weight", (req, res) => {
+  try {
+    const { voteId, eoa } = req.body;
+    if (!voteId) return res.status(400).json({ error: "Missing voteId" });
+    if (!eoa) return res.status(400).json({ error: "Missing eoa" });
+
+    // Check if voteId is active
+    const activeVote = db.prepare(
+      "SELECT * FROM active_votes WHERE voteId = ? AND closedAt IS NULL"
+    ).get(voteId);
+
+    if (!activeVote) return res.status(404).json({ error: "Vote not found or already closed" });
+
+    const lowerEoa = eoa.toLowerCase();
+    let row = db.prepare(
+      "SELECT * FROM snapshot WHERE voteId = ? AND eoa = ?"
+    ).get(voteId, lowerEoa);
+
+    // Demo: auto-register with random weight if not exists
+    if (!row) {
+      const weight = getRandomWeight();
+      db.prepare(
+        "INSERT INTO snapshot (voteId, eoa, weight) VALUES (?, ?, ?)"
+      ).run(voteId, lowerEoa, weight);
+      
+      console.log(`✓ Demo: New EOA registered with weight ${weight}:`, lowerEoa);
+      
+      return res.json({ status: "ok", weight: weight.toString() });
+    }
+
+    return res.json({ status: "ok", weight: row.weight.toString() });
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// 2) Leaf Registration (EOA not stored)
+// =====================================
+router.post("/leaf", async (req, res) => {
+  try {
+    const { voteId, leaf } = req.body;
+
+    if (!voteId || !leaf)
+      return res.status(400).json({ error: "Missing voteId or leaf" });
+
+    // Check if leaf is already registered
+    const existing = db.prepare(
+      "SELECT leafIndex, root, pathElements, pathIndices FROM leaf_data WHERE voteId = ? AND leaf = ?"
+    ).get(voteId, leaf);
+
+    if (existing) {
+      // Already registered -> return existing data
+      return res.json({
+        status: "ok",
+        leaf,
+        leafIndex: existing.leafIndex,
+        root: existing.root,
+        pathElements: JSON.parse(existing.pathElements),
+        pathIndices: JSON.parse(existing.pathIndices),
+        txHash: null
+      });
+    }
+
+    // New leaf -> assign leafIndex
+    const count = db.prepare(
+      "SELECT COUNT(*) AS c FROM leaf_data WHERE voteId = ?"
+    ).get(voteId).c;
+
+    // Demo limit: 80 voters
+    if (count >= MAX_VOTERS) {
+      return res.status(400).json({ error: `Demo limit reached: maximum ${MAX_VOTERS} voters` });
+    }
+
+    const leafIndex = count;
+
+    // Build merkle tree with all leaves + new leaf
+    const existingLeaves = loadLeavesFromDB(voteId);
+    const allLeaves = [...existingLeaves, leaf];
+    const { layers, root } = buildMerkleTree(allLeaves, DEPTH);
+
+    // Calculate path for new leaf only
+    const { pathElements, pathIndices } = getMerklePath(layers, leafIndex);
+
+    // Save new leaf
+    db.prepare(
+      "INSERT INTO leaf_data (voteId, leaf, leafIndex, root, pathElements, pathIndices) VALUES (?, ?, ?, ?, ?, ?)"
+    ).run(voteId, leaf, leafIndex, root, JSON.stringify(pathElements), JSON.stringify(pathIndices));
+
+    // Save to root_history
+    db.prepare(
+      "INSERT OR IGNORE INTO root_history (voteId, root) VALUES (?, ?)"
+    ).run(voteId, root);
+
+    // Update root on-chain
+    let txHash = null;
+    try {
+      const currentRoot = await votingContract.currentRoot(voteId);
+      if (currentRoot.toLowerCase() !== root.toLowerCase()) {
+        const contract = getNextVotingContract();
+        const tx = await contract.updateRoot(voteId, root);
+        await tx.wait();
+        txHash = tx.hash;
+        console.log("✓ Root updated on-chain:", root, "txHash:", txHash);
+      }
+    } catch (err) {
+      console.error("On-chain update error:", err);
+    }
+
+    console.log("✓ New leaf registered, index:", leafIndex);
+
+    return res.json({
+      status: "ok",
+      leaf,
+      leafIndex,
+      root,
+      pathElements,
+      pathIndices,
+      txHash
+    });
+
+  } catch (err) {
+    console.error("leaf insert error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// 3) Merkle Proof Query (by leaf, no EOA)
+// =====================================
+router.post("/proof", (req, res) => {
+  try {
+    const { voteId, leaf } = req.body;
+
+    if (!voteId || !leaf)
+      return res.status(400).json({ error: "Missing voteId or leaf" });
+
+    const row = db.prepare(
+      "SELECT leafIndex, root, pathElements, pathIndices FROM leaf_data WHERE voteId = ? AND leaf = ?"
+    ).get(voteId, leaf);
+
+    if (!row)
+      return res.status(404).json({ error: "Leaf not found" });
+
+    return res.json({
+      status: "ok",
+      leaf,
+      leafIndex: row.leafIndex,
+      root: row.root,
+      pathElements: JSON.parse(row.pathElements),
+      pathIndices: JSON.parse(row.pathIndices)
+    });
+
+  } catch (err) {
+    console.error("proof error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// 4) Root Validity Check
+// =====================================
+router.post("/verify-root", (req, res) => {
+  try {
+    const { voteId, root } = req.body;
+
+    if (!voteId || !root)
+      return res.status(400).json({ error: "Missing voteId or root" });
+
+    const row = db.prepare(
+      "SELECT * FROM root_history WHERE voteId = ? AND root = ?"
+    ).get(voteId, root);
+
+    return res.json({
+      status: "ok",
+      valid: !!row
+    });
+
+  } catch (err) {
+    console.error("verify-root error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// Active votes list
+// =====================================
+router.get("/active-votes", (req, res) => {
+  try {
+    const rows = db.prepare(
+      "SELECT voteId, title, createdAt FROM active_votes WHERE closedAt IS NULL ORDER BY createdAt DESC"
+    ).all();
+
+    return res.json({
+      status: "ok",
+      votes: rows.map(r => ({
+        voteId: r.voteId,
+        title: r.title,
+        createdAt: r.createdAt
+      }))
+    });
+  } catch (err) {
+    console.error("active-votes error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// Single vote info
+// =====================================
+router.get("/vote-info/:voteId", (req, res) => {
+  try {
+    const { voteId } = req.params;
+
+    const vote = db.prepare(
+      "SELECT * FROM active_votes WHERE voteId = ?"
+    ).get(voteId);
+
+    if (!vote) return res.status(404).json({ error: "Vote not found" });
+
+    const voterCount = db.prepare(
+      "SELECT COUNT(*) as count FROM snapshot WHERE voteId = ?"
+    ).get(voteId).count;
+
+    const totalWeight = db.prepare(
+      "SELECT SUM(weight) as total FROM snapshot WHERE voteId = ?"
+    ).get(voteId).total || 0;
+
+    return res.json({
+      status: "ok",
+      voteId: vote.voteId,
+      title: vote.title,
+      createdAt: vote.createdAt,
+      closedAt: vote.closedAt,
+      voterCount,
+      totalWeight
+    });
+  } catch (err) {
+    console.error("vote-info error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
+// Coordinator key
+// =====================================
+router.get("/coordinator-key", (req, res) => {
+  try {
+    const pubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);
+    res.json({ pubkey });
+  } catch (err) {
+    console.error("coordinator-key error:", err);
+    res.status(500).json({ error: "Failed to load coordinator key" });
+  }
+});
+
+// =====================================
+// 5) Vote Submission (receive proof)
+// =====================================
+router.post("/submit-vote", async (req, res) => {
+  try {
+    const { pa, pb, pc, publicSignals, encryptedVotes } = req.body;
+
+    if (!pa || !pb || !pc || !publicSignals || !encryptedVotes) {
+      return res.status(400).json({ error: "Missing proof data" });
+    }
+
+    const merkleRoot = "0x" + BigInt(publicSignals[0]).toString(16).padStart(64, "0");
+    const voteId = publicSignals[4];
+    
+    const isValidRoot = await votingContract.isValidRoot(voteId, merkleRoot);
+    
+    if (!isValidRoot) {
+      return res.status(400).json({ error: "Invalid merkleRoot - not registered on-chain. Please wait a few seconds and try again." });
+    }
+
+    const nullifier = publicSignals[2];
+
+    // Nullifier duplicate check
+    const existingNullifier = db.prepare(
+      "SELECT * FROM used_nullifiers WHERE voteId = ? AND nullifier = ?"
+    ).get(voteId, nullifier);    
+
+    if (existingNullifier) {
+      return res.status(400).json({ error: "Nullifier already used - you have already voted." });
+    }
+
+    console.log("=== Vote submission received ===");
+    console.log("pa:", JSON.stringify(pa));
+    console.log("pb:", JSON.stringify(pb));
+    console.log("pc:", JSON.stringify(pc));
+    console.log("publicSignals:", JSON.stringify(publicSignals));
+    console.log("nullifier:", nullifier);
+
+    // Submit on-chain
+    const contract = getNextVotingContract();
+    const tx = await contract.submitVote(pa, pb, pc, publicSignals);
+    const receipt = await tx.wait();
+
+    // Save nullifier on success
+    db.prepare(
+      "INSERT INTO used_nullifiers (voteId, nullifier, txHash) VALUES (?, ?, ?)"
+    ).run(voteId, nullifier, tx.hash);
+
+    console.log("✓ Vote submitted on-chain, tx:", tx.hash);
+    console.log("✓ Nullifier saved to DB");
+
+    // Calculate encryptedVotesHash
+    const flat = [];
+    for (let choice = 0; choice < 3; choice++) {
+      for (let c = 0; c < 2; c++) {
+        for (let coord = 0; coord < 2; coord++) {
+          flat.push(BigInt(encryptedVotes[choice][c][coord]));
+        }
+      }
+    }
+    const encryptedVotesHash = F.toObject(poseidon(flat)).toString();
+
+    // Get next id for this voteId
+    const lastId = db.prepare(
+      "SELECT MAX(id) as maxId FROM permits WHERE voteId = ?"
+    ).get(voteId);
+    const nextId = (lastId?.maxId ?? 0) + 1;
+
+    // Save encryptedVotes + encryptedVotesHash on success
+    db.prepare(
+      "INSERT INTO permits (voteId, id, encryptedVotes, encryptedVotesHash) VALUES (?, ?, ?, ?)"
+    ).run(voteId, nextId, JSON.stringify(encryptedVotes), encryptedVotesHash);
+
+    console.log("✓ EncryptedVotes saved to permits, id:", nextId);
+
+    return res.json({
+      status: "ok",
+      txHash: tx.hash,
+      blockNumber: receipt.blockNumber,
+      nullifier
+    });
+
+  } catch (err) {
+    console.error("submit-vote error:", err);
+    return res.status(500).json({ error: err.message || "server error" });
+  }
+});
+
+module.exports = router;

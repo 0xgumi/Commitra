@@ -7,7 +7,7 @@ console.log("✓ Initializing database...");
 const dbPath = path.join(__dirname, "voting.db");
 const db = new Database(dbPath);
 
-// snapshot (voteId first)
+// snapshot (voteId added for multi-vote support)
 db.prepare(`
   CREATE TABLE IF NOT EXISTS snapshot (
     voteId INTEGER,
@@ -28,7 +28,7 @@ db.prepare(`
   )
 `).run();
 
-// leaf_data (voteId already first)
+// leaf_data
 db.prepare(`
   CREATE TABLE IF NOT EXISTS leaf_data (
     voteId INTEGER,
@@ -53,7 +53,7 @@ db.prepare(`
   )
 `).run();
 
-// used_nullifiers (voteId already first)
+// used_nullifiers (voteId first)
 db.prepare(`
   CREATE TABLE IF NOT EXISTS used_nullifiers (
     voteId INTEGER,
@@ -64,7 +64,7 @@ db.prepare(`
   )
 `).run();
 
-// active_votes (voteId already first)
+// active_votes (for multi-vote support)
 db.prepare(`
   CREATE TABLE IF NOT EXISTS active_votes (
     voteId INTEGER PRIMARY KEY,
