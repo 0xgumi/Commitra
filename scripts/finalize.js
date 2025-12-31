@@ -1,0 +1,157 @@
+// scripts/finalize.js
+const path = require("path");
+const { buildBabyjub, buildPoseidon } = require("circomlibjs");
+const { ownerVotingContract, votingContract } = require("../src/config/onchain");
+const Database = require("better-sqlite3");
+require('dotenv').config({ path: '.env' });
+
+const dbPath = path.join(__dirname, "../src/db/voting.db");
+const db = new Database(dbPath);
+
+// Dummy constants (pre-calculated with r=1, weight=0)
+let DUMMY_ENCRYPTED_VOTES = null;
+let DUMMY_HASH = null;
+
+async function calculateDummyConstants() {
+  const babyJub = await buildBabyjub();
+  const poseidon = await buildPoseidon();
+  const F = babyJub.F;
+
+  // Load coordinator pubkey from environment
+  const coordinatorPubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);
+  const pubkey = [
+    F.e(coordinatorPubkey[0]),
+    F.e(coordinatorPubkey[1])
+  ];
+
+  // Encrypt with r=1, weight=0
+  // C1 = r * G = 1 * G = G
+  // C2 = weight * G + r * pubkey = 0 * G + 1 * pubkey = pubkey
+  const G = babyJub.Base8;
+  const r = 1n;
+
+  const C1 = babyJub.mulPointEscalar(G, r);
+  const C2 = pubkey; // weight=0 so only r * pubkey
+
+  const encryptedZero = [
+    [F.toObject(C1[0]).toString(), F.toObject(C1[1]).toString()],
+    [F.toObject(C2[0]).toString(), F.toObject(C2[1]).toString()]
+  ];
+
+  // All 3 choices are 0
+  DUMMY_ENCRYPTED_VOTES = [encryptedZero, encryptedZero, encryptedZero];
+
+  // Calculate encryptedVotesHash
+  const flat = [];
+  for (let choice = 0; choice < 3; choice++) {
+    for (let c = 0; c < 2; c++) {
+      for (let coord = 0; coord < 2; coord++) {
+        flat.push(BigInt(DUMMY_ENCRYPTED_VOTES[choice][c][coord]));
+      }
+    }
+  }
+  DUMMY_HASH = F.toObject(poseidon(flat)).toString();
+
+  console.log("✓ Dummy constants calculated");
+  console.log("  DUMMY_HASH:", DUMMY_HASH);
+}
+
+async function main() {
+  const voteId = process.argv[2];
+
+  if (!voteId) {
+    console.error("Usage: node scripts/finalize.js <voteId>");
+    console.error("Example: node scripts/finalize.js 1");
+    process.exit(1);
+  }
+
+  console.log(`\n=== Finalize VoteId: ${voteId} ===\n`);
+
+  // 0. Calculate dummy constants
+  await calculateDummyConstants();
+
+  // 1. Check if already closed
+  const alreadyClosed = await votingContract.isVotingClosed(voteId);
+  if (alreadyClosed) {
+    console.log("⚠ Voting already closed");
+  } else {
+    // 2. Call closeVoting
+    console.log("\n1. Calling closeVoting...");
+    const closeTx = await ownerVotingContract.closeVoting(voteId);
+    await closeTx.wait();
+    console.log("✓ closeVoting complete, tx:", closeTx.hash);
+    
+    // 2.5. Update active_votes
+    db.prepare(
+      "UPDATE active_votes SET closedAt = datetime('now') WHERE voteId = ?"
+    ).run(voteId);
+    console.log("✓ active_votes updated (closedAt set)");
+  }
+
+  // 3. Query current permits count
+  console.log("\n2. Querying permits count...");
+  const permits = db.prepare(
+    "SELECT COUNT(*) as count FROM permits WHERE voteId = ?"
+  ).get(voteId);
+  const realVoteCount = permits.count;
+  console.log("✓ Real vote count:", realVoteCount);
+
+  // 4. Calculate dummy count
+  const TARGET_COUNT = 100;
+  const dummyCount = TARGET_COUNT - realVoteCount;
+
+  if (dummyCount <= 0) {
+    console.log("✓ No dummies needed (vote count >= 100)");
+  } else {
+    console.log("✓ Dummies needed:", dummyCount);
+
+    // 5. Check if dummies already registered
+    const alreadyRegistered = await votingContract.isDummyRegistered(voteId);
+    if (alreadyRegistered) {
+      console.log("⚠ Dummies already registered");
+    } else {
+      // 6. Call registerDummyVotes
+      console.log("\n3. Calling registerDummyVotes...");
+      const dummyHashes = new Array(dummyCount).fill(DUMMY_HASH);
+      const dummyTx = await ownerVotingContract.registerDummyVotes(voteId, dummyHashes);
+      await dummyTx.wait();
+      console.log("✓ registerDummyVotes complete, tx:", dummyTx.hash);
+    }
+
+    // 7. Insert dummy permits to DB
+    console.log("\n4. Saving dummy permits to DB...");
+    
+    // Get current max id for this voteId
+    const lastId = db.prepare(
+      "SELECT MAX(id) as maxId FROM permits WHERE voteId = ?"
+    ).get(voteId);
+    let nextId = (lastId?.maxId ?? 0) + 1;
+
+    const insertStmt = db.prepare(
+      "INSERT INTO permits (voteId, id, encryptedVotes, encryptedVotesHash) VALUES (?, ?, ?, ?)"
+    );
+
+    for (let i = 0; i < dummyCount; i++) {
+      insertStmt.run(voteId, nextId, JSON.stringify(DUMMY_ENCRYPTED_VOTES), DUMMY_HASH);
+      nextId++;
+    }
+    console.log(`✓ ${dummyCount} dummy permits saved`);
+  }
+
+  // 8. Final verification
+  console.log("\n5. Final verification...");
+  const finalCount = db.prepare(
+    "SELECT COUNT(*) as count FROM permits WHERE voteId = ?"
+  ).get(voteId);
+  console.log("✓ Total permits:", finalCount.count);
+
+  console.log("\n=== Finalize complete ===");
+  console.log("Next step: node src/lib/tally.js", voteId);
+}
+
+main()
+  .then(() => process.exit(0))
+  .catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
