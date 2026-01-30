@@ -121,5 +121,6 @@ of the production system.
 It preserves the system’s core security guarantees
 while making evaluation accessible to external reviewers.
 
-For verification steps, see `docs/verification.md`.  
+For a complete end-to-end demo record, see `samples/demo/walkthrough.md`.
+For verification steps, see `docs/verification.md`.
 For production assumptions, see `samples/production/README.md`.
