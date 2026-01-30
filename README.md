@@ -73,7 +73,9 @@ A public demo is available on **Ethereum Sepolia** for hands-on evaluation.
 - Participants can cast encrypted votes and verify the final tally on-chain
 - The demo is intentionally simplified to maximize accessibility
 
-**Important:**  
+A recorded end-to-end walkthrough is available at [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md).
+
+**Important:**
 The demo environment differs from the production configuration.
 These differences are documented explicitly in [`docs/demo.md`](docs/demo.md).
 
