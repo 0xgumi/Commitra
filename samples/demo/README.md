@@ -3,12 +3,20 @@
 This directory documents the **Commitra demo environment**.
 
 The demo is designed to allow external reviewers, researchers,
-and community members to **interactively verify** Commitra’s
+and community members to **interactively verify** Commitra's
 zero-knowledge voting system **without accessing private code**.
 
-At the time of writing, no demo transactions are included yet.
-_As of this release, the demo has not yet been exercised by external participants._
-This is intentional.
+---
+
+## End-to-end walkthrough
+
+A complete vote lifecycle has been recorded and verified on Ethereum Sepolia.
+
+**[View the full walkthrough](./walkthrough.md)** — covers vote creation,
+three encrypted vote submissions, vote closure, and on-chain tally finalization.
+
+The walkthrough includes browser screenshots, transaction links,
+and a manual verification that the on-chain result matches the individual votes.
 
 ---
 
@@ -37,11 +45,11 @@ to enable open participation.
 
 | Aspect | Production | Demo |
 |------|-----------|------|
-| Voting weights | Snapshot-based | Randomly assigned (1–100) |
+| Voting weights | Snapshot-based | Randomly assigned (1–80) |
 | Vote sessions | Multiple `voteId`s | Single `voteId` per demo |
 | Participants | Predefined voters | Open to demo participants |
 | Scale | Configurable | Max 80 votes |
-| Chain | Ethereum Mainnet(planned) / L2 | Ethereum Sepolia |
+| Chain | Ethereum Mainnet (planned) / L2 | Ethereum Sepolia |
 
 ### Why random weights?
 
@@ -49,7 +57,7 @@ In production, voting weights are derived from a predefined snapshot.
 
 In the demo, participant addresses are unknown in advance.
 To preserve the structure of weighted voting,
-each participant is assigned a **random weight between 1 and 100**
+each participant is assigned a **random weight between 1 and 80**
 at registration time.
 
 This mechanism replaces the snapshot **for demonstration purposes only**.
@@ -95,25 +103,6 @@ Demo access is currently granted **by request**.
 If you are interested in testing the system, please reach out via:
 
 - X (Twitter): https://x.com/0xgumi
-
-Access codes are issued manually to ensure
-controlled testing and meaningful feedback.
-
----
-
-## Demo samples (future)
-
-This directory will be populated with **externally generated samples**
-once the demo is exercised by participants.
-
-Planned artifacts include:
-
-- Representative vote submission transactions
-- Representative tally finalization transactions
-- Verification notes derived from real demo usage
-
-No synthetic or developer-generated demo transactions
-will be included here.
 
 ---
 

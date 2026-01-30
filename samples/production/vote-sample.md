@@ -14,7 +14,7 @@
 | Status | Success |
 | Tx hash | `0x6ecc43b1d3be6a4308cc160d3fe490e7b50dada5b844e9f0f3ffc4636d1bad9d` |
 | Block | `9923666` |
-| Explorer | [View on Etherscan](<https://sepolia.etherscan.io/tx/0x6ecc43b1d3be6a4308cc160d3fe490e7b50dada5b844e9f0f3ffc4636d1bad9d) |
+| Explorer | [View on Etherscan](https://sepolia.etherscan.io/tx/0x6ecc43b1d3be6a4308cc160d3fe490e7b50dada5b844e9f0f3ffc4636d1bad9d) |
 
 ---
 
