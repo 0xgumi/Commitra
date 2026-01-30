@@ -43,9 +43,9 @@ Each vote is encrypted client-side and submitted with a zero-knowledge proof.
 
 ![Voter A submission](./images/voter-a.png)
 
-| Field | Value |
-|-------|-------|
-| Tx hash | [`0x07ea7bdb...b8ce`](https://sepolia.etherscan.io/tx/0x07ea7bdb998c2efb6300b74a74354cf8e4e26adb8de3a3789df24c6dc7c6b8ce) |
+**Tx:** [`0x07ea7bdb...b8ce`](https://sepolia.etherscan.io/tx/0x07ea7bdb998c2efb6300b74a74354cf8e4e26adb8de3a3789df24c6dc7c6b8ce)
+
+---
 
 ### Voter B
 
@@ -54,9 +54,9 @@ Each vote is encrypted client-side and submitted with a zero-knowledge proof.
 
 ![Voter B submission](./images/voter-b.png)
 
-| Field | Value |
-|-------|-------|
-| Tx hash | [`0x66f1818d...f342`](https://sepolia.etherscan.io/tx/0x66f1818dbb9c5cecf74151eae7007484b4fb7ced5c3172c5e79cb8e9fd7bf342) |
+**Tx:** [`0x66f1818d...f342`](https://sepolia.etherscan.io/tx/0x66f1818dbb9c5cecf74151eae7007484b4fb7ced5c3172c5e79cb8e9fd7bf342)
+
+---
 
 ### Voter C
 
@@ -65,17 +65,27 @@ Each vote is encrypted client-side and submitted with a zero-knowledge proof.
 
 ![Voter C submission](./images/voter-c.png)
 
-| Field | Value |
-|-------|-------|
-| Tx hash | [`0x852e9ad1...14a`](https://sepolia.etherscan.io/tx/0x852e9ad124d28adbe72c36127ef9d857e77aa23b137ae27fddc6ea5a593dc14a) |
+**Tx:** [`0x852e9ad1...14a`](https://sepolia.etherscan.io/tx/0x852e9ad124d28adbe72c36127ef9d857e77aa23b137ae27fddc6ea5a593dc14a)
+
+---
 
 ### What to notice
 
-Open any of the three vote transactions on Etherscan.
-You will find **no indication of what each voter chose**.
-The on-chain data contains only encrypted commitments and a zero-knowledge proof.
+Open any of the three vote transactions on Etherscan and observe:
 
-The vote choice (YES, NO, or ABSTAIN) is known only to the voter.
+1. **No one can tell who voted for what.**
+   The zero-knowledge proof verifies voter eligibility
+   without revealing which voter submitted which vote.
+
+2. **Even the server does not know.**
+   Vote choices are encrypted client-side before submission.
+   The coordinator receives and relays encrypted data
+   that it cannot decrypt or link to a specific voter.
+
+3. **No voter address appears on-chain.**
+   All vote transactions are submitted by the coordinator,
+   not by the voters themselves.
+   There is no on-chain link between a participant's wallet and their vote.
 
 ---
 
@@ -146,6 +156,7 @@ This walkthrough demonstrates that:
 4. The voting period was formally closed on-chain
 5. The final tally was computed and verified via a zero-knowledge proof
 6. The on-chain result **matches the sum of individual votes exactly**
+7. **Neither voter identities nor vote choices are linkable on-chain**
 
 All transactions are publicly verifiable on Ethereum Sepolia.
 

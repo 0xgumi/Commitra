@@ -16,10 +16,15 @@ and partners evaluating the system.
 
 ## What this is
 
-- A **zero-knowledge voting system** with encrypted ballots and ZK-verified tallying  
-- **Product-ready v1.5 implementation**, deployed and end-to-end verified  
-- **On-chain verifiable results**, with off-chain computation for gas efficiency  
-- Designed for real voting scenarios, not a research-only prototype  
+- A **zero-knowledge voting system** with encrypted ballots and ZK-verified tallying
+- **Product-ready v1.5 implementation**, deployed and end-to-end verified
+- **On-chain verifiable results**, with off-chain computation for gas efficiency
+- Designed for real voting scenarios, not a research-only prototype
+
+**Privacy guarantees:**
+- No one can tell who voted for what — ZK proofs verify eligibility without revealing identity
+- Even the server does not know — vote choices are encrypted client-side before submission
+- No voter address appears on-chain — all transactions are relayed by the coordinator
 
 ---
 
@@ -44,9 +49,8 @@ Without accessing any private code, you can verify that Commitra works end-to-en
 - On-chain tally finalized with a zero-knowledge proof  
 - Final results stored immutably on-chain  
 
-Representative demo samples:
-- [`samples/demo/vote-sample.md`](samples/demo/vote-sample.md)
-- [`samples/demo/tally-sample.md`](samples/demo/tally-sample.md)
+End-to-end demo walkthrough:
+- [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md)
 
 ### Production-assumption verification
 - Snapshot-based voting weights  
