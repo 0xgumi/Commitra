@@ -25,7 +25,8 @@ The vote session is created on-chain, establishing voteId 123.
 | Tx hash | [`0xcd55cbb6...a6e2`](https://sepolia.etherscan.io/tx/0xcd55cbb605e84d12fa79ad36ea3ba8354df84786b97a688fc57b5b447668a6e2) |
 | Method | `createVoteId(123)` |
 | Event | `VoteIdCreated(voteId: 123)` |
-| Contract | `0x896fB9AcbD6A2a3A2Db9635D3215c0eC5fFC33D9` |
+| VotingContract | [`0x896fB9AcbD6A2a3A2Db9635D3215c0eC5ffc33D9`](https://sepolia.etherscan.io/address/0x896fB9AcbD6A2a3A2Db9635D3215c0eC5ffc33D9) |
+| TallyContract | [`0x0323e975db2a48f82c84b48dDD63c0eA6bF66198`](https://sepolia.etherscan.io/address/0x0323e975db2a48f82c84b48dDD63c0eA6bF66198) |
 
 From this point, eligible participants can submit encrypted votes.
 
@@ -117,6 +118,7 @@ The proof and final result are submitted on-chain.
 |-------|-------|
 | Tx hash | [`0xe8adbf71...5eff`](https://sepolia.etherscan.io/tx/0xe8adbf71e1d4051168c528802ea70c7db6bfd2dc8ef14c8b74b5e731dfdb5eff) |
 | Event | `TallyFinalized` |
+| TallyContract | [`0x0323e975db2a48f82c84b48dDD63c0eA6bF66198`](https://sepolia.etherscan.io/address/0x0323e975db2a48f82c84b48dDD63c0eA6bF66198) |
 
 ### Final result (on-chain)
 
@@ -143,6 +145,12 @@ The on-chain result can be cross-checked against the screenshots above:
 - **ABSTAIN total:** 0 = **0**
 
 The manually computed result matches the on-chain tally exactly.
+
+### On-chain event log
+
+The `TallyFinalized` event as recorded on Etherscan:
+
+![Tally event log on Etherscan](./images/tally-event-log.png)
 
 ---
 
