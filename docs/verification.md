@@ -32,9 +32,9 @@ It focuses exclusively on **where and how correctness can be checked**.
 
 ### How to verify
 1. Open a representative vote submission transaction:
-   - Demo sample:  
-     `samples/demo/vote-sample.md`
-   - Production sample:  
+   - Demo walkthrough:
+     `samples/demo/walkthrough.md`
+   - Production sample:
      `samples/production/vote-sample.md`
 
 2. In the transaction details, confirm:
@@ -77,9 +77,9 @@ This ensures that the tally corresponds exactly to the submitted votes.
 
 ### How to verify
 1. Open a representative tally finalization transaction:
-   - Demo sample:  
-     `samples/demo/tally-sample.md`
-   - Production sample:  
+   - Demo walkthrough:
+     `samples/demo/walkthrough.md`
+   - Production sample:
      `samples/production/tally-sample.md`
 
 2. In the transaction details, confirm:
