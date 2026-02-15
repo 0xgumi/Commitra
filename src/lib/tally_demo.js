@@ -1,23 +1,23 @@
-// src/lib/tally.js
+// src/lib/tally_demo.js
 const path = require("path");
 const fs = require("fs");
 const { buildBabyjub, buildPoseidon } = require("circomlibjs");
 const snarkjs = require("snarkjs");
 const { discreteLog } = require("./bsgs");
 
-// DB 연결
+// Demo DB 연결
 const Database = require("better-sqlite3");
-const dbPath = path.join(__dirname, "../db/voting.db");
+const dbPath = path.join(__dirname, "../db/voting_demo.db");
 const db = new Database(dbPath);
 
 // Coordinator key from environment
-require('dotenv').config({ path: '.env.tally', quiet: true });
+require('dotenv').config({ path: '.env.demo.tally', quiet: true });
 
 const coordinatorPubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);
 const coordinatorPrivkey = process.env.COORDINATOR_PRIVKEY;
 
 async function runTally(voteId = 1) {
-  console.log("\n=== Tally 시작 ===\n");
+  console.log("\n=== Demo Tally 시작 ===\n");
 
   //----------------------------------
   // 1. 초기화
@@ -47,7 +47,7 @@ async function runTally(voteId = 1) {
   // 3. encryptedVotes 파싱 + encryptedVotesHashes 검증
   //----------------------------------
   console.log("2. encryptedVotesHashes 검증 중...");
-  
+
   const encryptedVotesAll = [];
   const encryptedVotesHashes = [];
 
@@ -65,12 +65,12 @@ async function runTally(voteId = 1) {
       }
     }
     const calculatedHash = F.toObject(poseidon(flat));
-    
+
     // DB 값과 비교 검증
     if (calculatedHash.toString() !== row.encryptedVotesHash) {
       throw new Error(`encryptedVotesHash mismatch at permit id`);
     }
-    
+
     encryptedVotesHashes.push(calculatedHash);
   }
 
@@ -175,11 +175,11 @@ async function runTally(voteId = 1) {
   const tallyInputForFile = { ...tallyInput };
   delete tallyInputForFile.coordinatorPrivkey;
 
-  const inputPath = path.join(__dirname, `../../tally_outputs/product/tally_input_${voteId}.json`);
+  const inputPath = path.join(__dirname, `../../tally_outputs/demo/tally_input_demo_${voteId}.json`);
   fs.writeFileSync(inputPath, JSON.stringify(tallyInputForFile, null, 2));
 
   console.log("✓ tally_input.json saved (privkey excluded)\n");
-  
+
   //----------------------------------
   // 8. Tally proof 생성
   //----------------------------------
@@ -210,7 +210,7 @@ async function runTally(voteId = 1) {
   console.log("8. tally_proof.json 저장 중...");
 
   const proofOutput = { pA, pB, pC, publicSignals };
-  const proofPath = path.join(__dirname, `../../tally_outputs/product/tally_proof_${voteId}.json`);
+  const proofPath = path.join(__dirname, `../../tally_outputs/demo/tally_proof_demo_${voteId}.json`);
   fs.writeFileSync(proofPath, JSON.stringify(proofOutput, null, 2));
 
   console.log("✓ tally_proof.json 저장 완료\n");
@@ -218,11 +218,11 @@ async function runTally(voteId = 1) {
   //----------------------------------
   // 10. 결과 출력
   //----------------------------------
-  console.log("=== 최종 투표 결과 ===");
+  console.log("=== 최종 투표 결과 (Demo) ===");
   console.log("YES:", tallyResult[0]);
   console.log("NO:", tallyResult[1]);
   console.log("ABSTAIN:", tallyResult[2]);
-  console.log("======================\n");
+  console.log("=============================\n");
 
   return {
     yes: tallyResult[0],

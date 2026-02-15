@@ -1,5 +1,5 @@
 // src/config/onchain.js
-require('dotenv').config();
+require('dotenv').config({ quiet: true });
 const { ethers } = require("ethers");
 
 // Config from environment variables

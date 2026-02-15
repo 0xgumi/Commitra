@@ -50,7 +50,8 @@ async function discreteLog(M, maxRange = 100000000000) {
     }
     
     // gamma = gamma - giantStep
-    const negGiantStep = [giantStep[0], F.neg(giantStep[1])];
+    // Twisted Edwards curve: negation of (x, y) is (-x, y)
+    const negGiantStep = [F.neg(giantStep[0]), giantStep[1]];
     gamma = babyJub.addPoint(gamma, negGiantStep);
   }
   

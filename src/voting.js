@@ -157,6 +157,7 @@ window.generateVoterRecord = async function () {
     const msg = "zkVote | voteId=" + voteId;
     const sig = await signer.signMessage(msg);
     out("Signature obtained");
+    out("⏳ Building voter credentials, please wait...");
 
     //--------------------------------------------------
     // 3. seedMaster
@@ -252,16 +253,6 @@ window.generateVoterRecord = async function () {
 
     out("✓ Registered, leafIndex: " + leafInfo.leafIndex);
 
-    //--------------------------------------------------
-    // 10. On-chain confirmation (wait if txHash exists)
-    //--------------------------------------------------
-    if (leafInfo.txHash) {
-      out("⏳ Waiting for on-chain confirmation...");
-      const provider = new ethers.BrowserProvider(window.ethereum);
-      await provider.waitForTransaction(leafInfo.txHash);
-      out("✓ On-chain root update confirmed");
-    }
-
     isOnchainConfirmed = true;
 
     //--------------------------------------------------
@@ -293,7 +284,6 @@ window.generateVoterRecord = async function () {
       leaf: leafHex
     };
 
-    console.log("voterData:", voterData);
     out("✓ Voter record ready");
     out("Please select your vote: YES(0), NO(1), ABSTAIN(2)");
     if (isOnchainConfirmed) {
@@ -453,8 +443,7 @@ window.selectVoteChoice = async function (voteChoice) {
       encryptedVotes
     };
 
-    console.log("vote_input:", voteInput);
-    out("✓ Vote input generated (check console)");
+    out("✓ Vote input generated");
     out("Please click the Submit Vote button.");
 
     // Show submit vote button
@@ -504,6 +493,7 @@ window.submitVote = async function () {
     console.log("publicSignals:", publicSignals);
 
     out("✓ Proof ready");
+    out("⏳ Submitting vote to blockchain...");
 
     // Submit to server
     const submitResp = await fetch("/voter/submit-vote", {

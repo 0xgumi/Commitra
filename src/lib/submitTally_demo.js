@@ -1,22 +1,24 @@
+require('dotenv').config({ path: '.env.demo', quiet: true });
+
 const path = require("path");
 const fs = require("fs");
 const { tallyContract } = require("../config/onchain");
 
 async function submitTally(voteId) {
   if (!voteId) {
-    console.error("Usage: node src/lib/submitTally.js <voteId>");
-    console.error("Example: node src/lib/submitTally.js 1");
+    console.error("Usage: node src/lib/submitTally_demo.js <voteId>");
+    console.error("Example: node src/lib/submitTally_demo.js 1");
     process.exit(1);
   }
 
-  console.log(`\n=== finalizeTally submit (voteId: ${voteId}) ===\n`);
+  console.log(`\n=== Demo finalizeTally submit (voteId: ${voteId}) ===\n`);
 
-  // Load proof for this voteId
-  const proofPath = path.join(__dirname, `../../tally_outputs/product/tally_proof_${voteId}.json`);
+  // Load proof for this voteId (demo version)
+  const proofPath = path.join(__dirname, `../../tally_outputs/demo/tally_proof_demo_${voteId}.json`);
 
   if (!fs.existsSync(proofPath)) {
-    console.error(`❌ Proof file not found: tally_proof_${voteId}.json`);
-    console.error(`Run "node src/lib/tally.js ${voteId}" first.`);
+    console.error(`❌ Proof file not found: tally_proof_demo_${voteId}.json`);
+    console.error(`Run "node src/lib/tally_demo.js ${voteId}" first.`);
     process.exit(1);
   }
   const { pA, pB, pC, publicSignals } = JSON.parse(fs.readFileSync(proofPath, "utf-8"));
@@ -26,7 +28,7 @@ async function submitTally(voteId) {
 
   // on-chain 제출
   console.log("2. finalizeTally() 호출 중...");
-  
+
   const tx = await tallyContract.finalizeTally(voteId, pA, pB, pC, publicSignals);
   console.log("tx hash:", tx.hash);
 
@@ -35,7 +37,7 @@ async function submitTally(voteId) {
 
   // 결과 확인
   const [yes, no, abstain] = await tallyContract.getTallyResult(voteId);
-  console.log("\n=== On-chain 결과 ===");
+  console.log("\n=== On-chain 결과 (Demo) ===");
   console.log("YES:", yes.toString());
   console.log("NO:", no.toString());
   console.log("ABSTAIN:", abstain.toString());

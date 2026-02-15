@@ -1,11 +1,13 @@
-// scripts/finalize.js
+// scripts/finalize_demo.js
+// IMPORTANT: dotenv MUST be loaded before onchain.js
+require('dotenv').config({ path: '.env.demo', quiet: true });
+
 const path = require("path");
 const { buildBabyjub, buildPoseidon } = require("circomlibjs");
 const { ownerVotingContract, votingContract } = require("../src/config/onchain");
 const Database = require("better-sqlite3");
-require('dotenv').config({ path: '.env', quiet: true });
 
-const dbPath = path.join(__dirname, "../src/db/voting.db");
+const dbPath = path.join(__dirname, "../src/db/voting_demo.db");
 const db = new Database(dbPath);
 
 // Dummy constants (pre-calculated with r=1, weight=0)
@@ -60,12 +62,12 @@ async function main() {
   const voteId = process.argv[2];
 
   if (!voteId) {
-    console.error("Usage: node scripts/finalize.js <voteId>");
-    console.error("Example: node scripts/finalize.js 1");
+    console.error("Usage: node scripts/finalize_demo.js <voteId>");
+    console.error("Example: node scripts/finalize_demo.js 1");
     process.exit(1);
   }
 
-  console.log(`\n=== Finalize VoteId: ${voteId} ===\n`);
+  console.log(`\n=== Finalize Demo VoteId: ${voteId} ===\n`);
 
   // 0. Calculate dummy constants
   await calculateDummyConstants();
@@ -80,7 +82,7 @@ async function main() {
     const closeTx = await ownerVotingContract.closeVoting(voteId);
     await closeTx.wait();
     console.log("✓ closeVoting complete, tx:", closeTx.hash);
-    
+
     // 2.5. Update active_votes
     db.prepare(
       "UPDATE active_votes SET closedAt = datetime('now') WHERE voteId = ?"
@@ -120,7 +122,7 @@ async function main() {
 
     // 7. Insert dummy permits to DB
     console.log("\n4. Saving dummy permits to DB...");
-    
+
     // Get current max id for this voteId
     const lastId = db.prepare(
       "SELECT MAX(id) as maxId FROM permits WHERE voteId = ?"
@@ -145,10 +147,10 @@ async function main() {
   ).get(voteId);
   console.log("✓ Total permits:", finalCount.count);
 
-  // 9. Cleanup server locks (optional - server may not be running)
+  // 9. Cleanup server locks (Demo server on port 4000)
   console.log("\n6. Cleaning up server locks...");
   try {
-    const response = await fetch("http://localhost:3000/voter/cleanup-locks", {
+    const response = await fetch("http://localhost:4000/voter/cleanup-locks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ voteId: parseInt(voteId) })
@@ -157,11 +159,11 @@ async function main() {
       console.log("✓ Server locks cleaned up");
     }
   } catch (err) {
-    console.log("⚠ Server not running or cleanup failed (non-critical)");
+    console.log("⚠ Demo server not running or cleanup failed (non-critical)");
   }
 
   console.log("\n=== Finalize complete ===");
-  console.log("Next step: node src/lib/tally.js", voteId);
+  console.log("Next step: node src/lib/tally_demo.js", voteId);
 }
 
 main()

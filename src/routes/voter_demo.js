@@ -371,17 +371,39 @@
 
 const express = require("express");
 const router = express.Router();
-const db = require("../db/db");
+const db = require("../db/db_demo");
 const circomlib = require("circomlibjs");
 const { votingContract, getNextVotingContract } = require("../config/onchain");
 
 let poseidon, F;
 
-(async () => {
+// #1 Fix: Poseidon 초기화 Promise로 race condition 방지
+const poseidonReady = (async () => {
   poseidon = await circomlib.buildPoseidon();
   F = poseidon.F;
   console.log("✓ Poseidon initialized");
 })();
+
+async function ensurePoseidon() {
+  await poseidonReady;
+  if (!poseidon) throw new Error("Poseidon not initialized");
+}
+
+// #2 Fix: Leaf 등록 race condition 방지를 위한 voteId별 mutex
+const leafLocks = new Map();
+
+async function acquireLeafLock(voteId) {
+  const key = String(voteId);
+  if (!leafLocks.has(key)) {
+    leafLocks.set(key, Promise.resolve());
+  }
+  const current = leafLocks.get(key);
+  let release;
+  const next = new Promise(resolve => { release = resolve; });
+  leafLocks.set(key, next);
+  await current;
+  return release;
+}
 
 const ZERO = "0x" + "0".repeat(64);
 const DEPTH = 15;
@@ -508,12 +530,18 @@ router.post("/weight", (req, res) => {
 // 2) Leaf Registration (EOA not stored)
 // =====================================
 router.post("/leaf", async (req, res) => {
+  const { voteId, leaf } = req.body;
+
+  if (!voteId || !leaf)
+    return res.status(400).json({ error: "Missing voteId or leaf" });
+
+  // #1 Fix: Poseidon 초기화 대기
+  await ensurePoseidon();
+
+  // #2 Fix: voteId별 mutex로 동시 요청 방지
+  let release = null;
   try {
-    const { voteId, leaf } = req.body;
-
-    if (!voteId || !leaf)
-      return res.status(400).json({ error: "Missing voteId or leaf" });
-
+    release = await acquireLeafLock(voteId);
     // Check if leaf is already registered
     const existing = db.prepare(
       "SELECT leafIndex, root, pathElements, pathIndices FROM leaf_data WHERE voteId = ? AND leaf = ?"
@@ -552,30 +580,25 @@ router.post("/leaf", async (req, res) => {
     // Calculate path for new leaf only
     const { pathElements, pathIndices } = getMerklePath(layers, leafIndex);
 
-    // Save new leaf
+    // #3 Fix: 온체인 먼저, 성공 시에만 DB 저장 (원자성)
+    let txHash = null;
+    const currentRoot = await votingContract.currentRoot(voteId);
+    if (currentRoot.toLowerCase() !== root.toLowerCase()) {
+      const contract = getNextVotingContract();
+      const tx = await contract.updateRoot(voteId, root);
+      await tx.wait();
+      txHash = tx.hash;
+      console.log("✓ Root updated on-chain:", root, "txHash:", txHash);
+    }
+
+    // 온체인 성공 후 DB 저장
     db.prepare(
       "INSERT INTO leaf_data (voteId, leaf, leafIndex, root, pathElements, pathIndices) VALUES (?, ?, ?, ?, ?, ?)"
     ).run(voteId, leaf, leafIndex, root, JSON.stringify(pathElements), JSON.stringify(pathIndices));
 
-    // Save to root_history
     db.prepare(
       "INSERT OR IGNORE INTO root_history (voteId, root) VALUES (?, ?)"
     ).run(voteId, root);
-
-    // Update root on-chain
-    let txHash = null;
-    try {
-      const currentRoot = await votingContract.currentRoot(voteId);
-      if (currentRoot.toLowerCase() !== root.toLowerCase()) {
-        const contract = getNextVotingContract();
-        const tx = await contract.updateRoot(voteId, root);
-        await tx.wait();
-        txHash = tx.hash;
-        console.log("✓ Root updated on-chain:", root, "txHash:", txHash);
-      }
-    } catch (err) {
-      console.error("On-chain update error:", err);
-    }
 
     console.log("✓ New leaf registered, index:", leafIndex);
 
@@ -591,7 +614,10 @@ router.post("/leaf", async (req, res) => {
 
   } catch (err) {
     console.error("leaf insert error:", err);
-    return res.status(500).json({ error: "server error" });
+    return res.status(500).json({ error: err.message || "server error" });
+  } finally {
+    // #2 Fix: lock 해제 (획득한 경우에만)
+    if (release) release();
   }
 });
 
@@ -725,10 +751,34 @@ router.get("/coordinator-key", (req, res) => {
 });
 
 // =====================================
+// Cleanup locks for closed vote
+// =====================================
+router.post("/cleanup-locks", (req, res) => {
+  try {
+    const { voteId } = req.body;
+    if (!voteId) return res.status(400).json({ error: "Missing voteId" });
+
+    const key = String(voteId);
+    if (leafLocks.has(key)) {
+      leafLocks.delete(key);
+      console.log(`✓ Cleaned up leafLock for voteId: ${voteId}`);
+    }
+
+    return res.json({ status: "ok", message: `Lock cleaned for voteId ${voteId}` });
+  } catch (err) {
+    console.error("cleanup-locks error:", err);
+    return res.status(500).json({ error: "server error" });
+  }
+});
+
+// =====================================
 // 5) Vote Submission (receive proof)
 // =====================================
 router.post("/submit-vote", async (req, res) => {
   try {
+    // #1 Fix: Poseidon 초기화 대기
+    await ensurePoseidon();
+
     const { pa, pb, pc, publicSignals, encryptedVotes } = req.body;
 
     if (!pa || !pb || !pc || !publicSignals || !encryptedVotes) {
