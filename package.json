@@ -20,6 +20,7 @@
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
+    "express-rate-limit": "^8.2.1",
     "snarkjs": "^0.6.11"
   },
   "description": "",

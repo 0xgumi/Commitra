@@ -2,6 +2,7 @@ require('dotenv').config({ quiet: true });
 
 const express = require("express");
 const path = require("path");
+const rateLimit = require("express-rate-limit");
 
 const voterRouter = require("./routes/voter");
 
@@ -22,7 +23,30 @@ if (process.env.BASIC_AUTH_PASSWORD) {
   console.log("✓ Basic Auth enabled");
 }
 
-app.use(express.json());
+// Rate limiting
+app.use(rateLimit({
+  windowMs: 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests, please try again later" }
+}));
+app.use("/voter/leaf", rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests to this endpoint, please try again later" }
+}));
+app.use("/voter/submit-vote", rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: "Too many requests to this endpoint, please try again later" }
+}));
+
+app.use(express.json({ limit: '1mb' }));
 
 app.use("/voter", voterRouter);
 app.get("/health", (req, res) => res.send("OK"));

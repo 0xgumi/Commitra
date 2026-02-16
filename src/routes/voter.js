@@ -38,6 +38,35 @@ const ZERO = "0x" + "0".repeat(64);
 const DEPTH = 15;
 
 // =====================================
+// Input Validation
+// =====================================
+const LEAF_REGEX = /^0x[0-9a-f]{64}$/i;
+const EOA_REGEX = /^0x[0-9a-fA-F]{40}$/;
+
+function isValidLeaf(v) {
+  return typeof v === 'string' && LEAF_REGEX.test(v);
+}
+
+function isValidEoa(v) {
+  return typeof v === 'string' && EOA_REGEX.test(v);
+}
+
+function isValidEncryptedVotes(ev) {
+  if (!Array.isArray(ev) || ev.length !== 3) return false;
+  for (const choice of ev) {
+    if (!Array.isArray(choice) || choice.length !== 2) return false;
+    for (const point of choice) {
+      if (!Array.isArray(point) || point.length !== 2) return false;
+      for (const coord of point) {
+        if (typeof coord !== 'string') return false;
+        try { BigInt(coord); } catch { return false; }
+      }
+    }
+  }
+  return true;
+}
+
+// =====================================
 // DB Helper - Load leaf list
 // =====================================
 function loadLeavesFromDB(voteId) {
@@ -115,6 +144,7 @@ router.post("/weight", (req, res) => {
     const { voteId, eoa } = req.body;
     if (!voteId) return res.status(400).json({ error: "Missing voteId" });
     if (!eoa) return res.status(400).json({ error: "Missing eoa" });
+    if (!isValidEoa(eoa)) return res.status(400).json({ error: "Invalid eoa format" });
 
     // Check if voteId is active
     const activeVote = db.prepare(
@@ -145,6 +175,8 @@ router.post("/leaf", async (req, res) => {
 
   if (!voteId || !leaf)
     return res.status(400).json({ error: "Missing voteId or leaf" });
+  if (!isValidLeaf(leaf))
+    return res.status(400).json({ error: "Invalid leaf format" });
 
   // #1 Fix: Poseidon 초기화 대기
   await ensurePoseidon();
@@ -356,7 +388,10 @@ router.get("/coordinator-key", (req, res) => {
 // =====================================
 router.post("/cleanup-locks", (req, res) => {
   try {
-    const { voteId } = req.body;
+    const { voteId, token } = req.body;
+    if (!token || token !== process.env.INTERNAL_API_TOKEN) {
+      return res.status(403).json({ error: "Unauthorized" });
+    }
     if (!voteId) return res.status(400).json({ error: "Missing voteId" });
 
     const key = String(voteId);
@@ -384,6 +419,9 @@ router.post("/submit-vote", async (req, res) => {
 
     if (!pa || !pb || !pc || !publicSignals || !encryptedVotes) {
       return res.status(400).json({ error: "Missing proof data" });
+    }
+    if (!isValidEncryptedVotes(encryptedVotes)) {
+      return res.status(400).json({ error: "Invalid encryptedVotes format" });
     }
 
     const merkleRoot = "0x" + BigInt(publicSignals[0]).toString(16).padStart(64, "0");

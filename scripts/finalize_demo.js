@@ -153,7 +153,7 @@ async function main() {
     const response = await fetch("http://localhost:4000/voter/cleanup-locks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voteId: parseInt(voteId) })
+      body: JSON.stringify({ voteId: parseInt(voteId), token: process.env.INTERNAL_API_TOKEN })
     });
     if (response.ok) {
       console.log("✓ Server locks cleaned up");
