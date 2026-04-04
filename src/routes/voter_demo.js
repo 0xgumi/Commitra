@@ -373,6 +373,8 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db/db_demo");
 const circomlib = require("circomlibjs");
+const fs = require("fs");
+const path = require("path");
 const { votingContract, getNextVotingContract } = require("../config/onchain");
 
 let poseidon, F;
@@ -408,6 +410,17 @@ async function acquireLeafLock(voteId) {
 const ZERO = "0x" + "0".repeat(64);
 const DEPTH = 15;
 const MAX_VOTERS = 80; // Demo limit
+const RECOVERY_LOG_DIR = path.join(__dirname, "../../recovery_logs");
+const RECOVERY_LOG_FILE = path.join(RECOVERY_LOG_DIR, "submit_vote_recovery_demo.jsonl");
+
+function writeSubmitVoteRecoveryLog(entry) {
+  try {
+    fs.mkdirSync(RECOVERY_LOG_DIR, { recursive: true });
+    fs.appendFileSync(RECOVERY_LOG_FILE, JSON.stringify(entry) + "\n");
+  } catch (err) {
+    console.error("Failed to write submit-vote recovery log:", err);
+  }
+}
 
 // =====================================
 // Input Validation
@@ -514,6 +527,33 @@ function getMerklePath(layers, leafIndex) {
 
   return { pathElements, pathIndices };
 }
+
+const saveLeafDataTx = db.transaction((voteId, leaf, leafIndex, root, pathElements, pathIndices) => {
+  db.prepare(
+    "INSERT INTO leaf_data (voteId, leaf, leafIndex, root, pathElements, pathIndices) VALUES (?, ?, ?, ?, ?, ?)"
+  ).run(voteId, leaf, leafIndex, root, JSON.stringify(pathElements), JSON.stringify(pathIndices));
+
+  db.prepare(
+    "INSERT OR IGNORE INTO root_history (voteId, root) VALUES (?, ?)"
+  ).run(voteId, root);
+});
+
+const saveSubmitVoteTx = db.transaction((voteId, nullifier, txHash, encryptedVotesJson, encryptedVotesHash) => {
+  db.prepare(
+    "INSERT INTO used_nullifiers (voteId, nullifier, txHash) VALUES (?, ?, ?)"
+  ).run(voteId, nullifier, txHash);
+
+  const lastId = db.prepare(
+    "SELECT MAX(id) as maxId FROM permits WHERE voteId = ?"
+  ).get(voteId);
+  const nextId = (lastId?.maxId ?? 0) + 1;
+
+  db.prepare(
+    "INSERT INTO permits (voteId, id, encryptedVotes, encryptedVotesHash) VALUES (?, ?, ?, ?)"
+  ).run(voteId, nextId, encryptedVotesJson, encryptedVotesHash);
+
+  return nextId;
+});
 
 // =====================================
 // 1) Snapshot weight lookup (Demo: auto-register with random weight)
@@ -623,14 +663,8 @@ router.post("/leaf", async (req, res) => {
       console.log("✓ Root updated on-chain:", root, "txHash:", txHash);
     }
 
-    // 온체인 성공 후 DB 저장
-    db.prepare(
-      "INSERT INTO leaf_data (voteId, leaf, leafIndex, root, pathElements, pathIndices) VALUES (?, ?, ?, ?, ?, ?)"
-    ).run(voteId, leaf, leafIndex, root, JSON.stringify(pathElements), JSON.stringify(pathIndices));
-
-    db.prepare(
-      "INSERT OR IGNORE INTO root_history (voteId, root) VALUES (?, ?)"
-    ).run(voteId, root);
+    // 온체인 성공 후 DB 저장 (트랜잭션)
+    saveLeafDataTx(voteId, leaf, leafIndex, root, pathElements, pathIndices);
 
     console.log("✓ New leaf registered, index:", leafIndex);
 
@@ -843,6 +877,22 @@ router.post("/submit-vote", async (req, res) => {
       return res.status(400).json({ error: "Nullifier already used - you have already voted." });
     }
 
+    // Calculate encryptedVotesHash
+    const flat = [];
+    for (let choice = 0; choice < 3; choice++) {
+      for (let c = 0; c < 2; c++) {
+        for (let coord = 0; coord < 2; coord++) {
+          flat.push(BigInt(encryptedVotes[choice][c][coord]));
+        }
+      }
+    }
+    const encryptedVotesHash = F.toObject(poseidon(flat)).toString();
+    const proofEncryptedVotesHash = BigInt(publicSignals[3]).toString();
+
+    if (encryptedVotesHash !== proofEncryptedVotesHash) {
+      return res.status(400).json({ error: "encryptedVotesHash mismatch with proof publicSignals[3]" });
+    }
+
     console.log("=== Vote submission received ===");
     console.log("pa:", JSON.stringify(pa));
     console.log("pb:", JSON.stringify(pb));
@@ -855,35 +905,33 @@ router.post("/submit-vote", async (req, res) => {
     const tx = await contract.submitVote(pa, pb, pc, publicSignals);
     const receipt = await tx.wait();
 
-    // Save nullifier on success
-    db.prepare(
-      "INSERT INTO used_nullifiers (voteId, nullifier, txHash) VALUES (?, ?, ?)"
-    ).run(voteId, nullifier, tx.hash);
+    let nextId;
+    try {
+      nextId = saveSubmitVoteTx(
+        voteId,
+        nullifier,
+        tx.hash,
+        JSON.stringify(encryptedVotes),
+        encryptedVotesHash
+      );
+    } catch (dbErr) {
+      writeSubmitVoteRecoveryLog({
+        timestamp: new Date().toISOString(),
+        voteId: String(voteId),
+        nullifier: String(nullifier),
+        txHash: tx.hash,
+        encryptedVotes,
+        encryptedVotesHash,
+        reason: dbErr.message || "unknown DB error"
+      });
+      console.error("submit-vote DB persistence failed after on-chain success:", dbErr);
+      return res.status(500).json({
+        error: "On-chain vote succeeded but DB persistence failed. Recovery log written."
+      });
+    }
 
     console.log("✓ Vote submitted on-chain, tx:", tx.hash);
-    console.log("✓ Nullifier saved to DB");
-
-    // Calculate encryptedVotesHash
-    const flat = [];
-    for (let choice = 0; choice < 3; choice++) {
-      for (let c = 0; c < 2; c++) {
-        for (let coord = 0; coord < 2; coord++) {
-          flat.push(BigInt(encryptedVotes[choice][c][coord]));
-        }
-      }
-    }
-    const encryptedVotesHash = F.toObject(poseidon(flat)).toString();
-
-    // Get next id for this voteId
-    const lastId = db.prepare(
-      "SELECT MAX(id) as maxId FROM permits WHERE voteId = ?"
-    ).get(voteId);
-    const nextId = (lastId?.maxId ?? 0) + 1;
-
-    // Save encryptedVotes + encryptedVotesHash on success
-    db.prepare(
-      "INSERT INTO permits (voteId, id, encryptedVotes, encryptedVotesHash) VALUES (?, ?, ?, ?)"
-    ).run(voteId, nextId, JSON.stringify(encryptedVotes), encryptedVotesHash);
+    console.log("✓ Nullifier + encryptedVotes saved to DB");
 
     console.log("✓ EncryptedVotes saved to permits, id:", nextId);
 

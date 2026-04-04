@@ -7,6 +7,31 @@ const { ownerVotingContract } = require("../src/config/onchain");
 const dbPath = path.join(__dirname, "../src/db/voting_demo.db");
 const db = new Database(dbPath);
 
+const syncDemoVoteTx = db.transaction((voteId, title) => {
+  const existing = db.prepare(
+    "SELECT voteId, title, closedAt FROM active_votes WHERE voteId = ?"
+  ).get(voteId);
+
+  if (!existing) {
+    db.prepare(
+      "INSERT INTO active_votes (voteId, title) VALUES (?, ?)"
+    ).run(voteId, title);
+    return { inserted: true };
+  }
+
+  if (existing.closedAt) {
+    throw new Error(`voteId ${voteId} already exists and is closed`);
+  }
+
+  if ((existing.title || "") !== title) {
+    throw new Error(
+      `active_votes title mismatch for voteId ${voteId}: DB='${existing.title}', input='${title}'`
+    );
+  }
+
+  return { inserted: false };
+});
+
 async function main() {
   const args = process.argv.slice(2);
   if (args.length < 2) {
@@ -22,34 +47,23 @@ async function main() {
   console.log(`voteId: ${voteId}`);
   console.log(`title: ${title}`);
 
-  // 1. Check if voteId already exists
-  const existing = db.prepare(
-    "SELECT * FROM active_votes WHERE voteId = ?"
-  ).get(voteId);
-
-  if (existing) {
-    console.error(`\n❌ voteId ${voteId} already exists`);
-    process.exit(1);
-  }
-
-  // 2. Insert into active_votes
-  db.prepare(
-    "INSERT INTO active_votes (voteId, title) VALUES (?, ?)"
-  ).run(voteId, title);
-  console.log(`✓ active_votes: inserted`);
-
-  // 3. On-chain createVoteId
-  console.log(`\n3. Calling createVoteId(${voteId}) on-chain...`);
-  try {
+  // 1. On-chain createVoteId 먼저 처리 (#2)
+  console.log(`\n1. Calling createVoteId(${voteId}) on-chain...`);
+  const isValid = await ownerVotingContract.isValidVoteId(voteId);
+  if (isValid) {
+    console.log(`✓ voteId ${voteId} already exists on-chain`);
+  } else {
     const tx = await ownerVotingContract.createVoteId(voteId);
     await tx.wait();
     console.log(`✓ createVoteId tx: ${tx.hash}`);
-  } catch (err) {
-    if (err.message.includes("already exists")) {
-      console.log(`⚠ voteId ${voteId} already exists on-chain`);
-    } else {
-      throw err;
-    }
+  }
+
+  // 2. DB 동기화 (idempotent)
+  const syncResult = syncDemoVoteTx(voteId, title);
+  if (syncResult.inserted) {
+    console.log("✓ active_votes: inserted");
+  } else {
+    console.log("✓ active_votes: already synced");
   }
 
   console.log(`\n✅ Demo vote created successfully!`);
