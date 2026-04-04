@@ -12,6 +12,16 @@ const db = new Database(dbPath);
 let DUMMY_ENCRYPTED_VOTES = null;
 let DUMMY_HASH = null;
 
+function buildInternalApiHeaders() {
+  const headers = { "Content-Type": "application/json" };
+  const password = process.env.BASIC_AUTH_PASSWORD;
+  if (password) {
+    const credentials = Buffer.from(`internal:${password}`).toString("base64");
+    headers.Authorization = `Basic ${credentials}`;
+  }
+  return headers;
+}
+
 async function calculateDummyConstants() {
   const babyJub = await buildBabyjub();
   const poseidon = await buildPoseidon();
@@ -150,11 +160,13 @@ async function main() {
   try {
     const response = await fetch("http://localhost:3000/voter/cleanup-locks", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: buildInternalApiHeaders(),
       body: JSON.stringify({ voteId: parseInt(voteId), token: process.env.INTERNAL_API_TOKEN })
     });
     if (response.ok) {
       console.log("✓ Server locks cleaned up");
+    } else {
+      console.log(`⚠ cleanup-locks returned HTTP ${response.status} (non-critical)`);
     }
   } catch (err) {
     console.log("⚠ Server not running or cleanup failed (non-critical)");

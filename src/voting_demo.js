@@ -148,6 +148,12 @@ window.generateVoterRecord = async function () {
     }
 
     const weight = weightData.weight;
+    const leafAdmissionToken = weightData.leafAdmissionToken;
+    if (!leafAdmissionToken) {
+      out("❌ Missing leaf admission token from server");
+      isGenerating = false;
+      return;
+    }
     out("weight = " + weight);
 
     //--------------------------------------------------
@@ -238,7 +244,7 @@ window.generateVoterRecord = async function () {
     const leafResp = await fetch("/voter/leaf", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ voteId, leaf: leafHex })
+      body: JSON.stringify({ voteId, leaf: leafHex, leafAdmissionToken })
     });
 
     const leafInfo = await leafResp.json();

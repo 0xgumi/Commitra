@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const db = require("../db/db");
 const circomlib = require("circomlibjs");
+const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { votingContract, getNextVotingContract } = require("../config/onchain");
@@ -40,6 +41,17 @@ const ZERO = "0x" + "0".repeat(64);
 const DEPTH = 15;
 const RECOVERY_LOG_DIR = path.join(__dirname, "../../recovery_logs");
 const RECOVERY_LOG_FILE = path.join(RECOVERY_LOG_DIR, "submit_vote_recovery_product.jsonl");
+const LEAF_AUDIT_LOG_FILE = path.join(RECOVERY_LOG_DIR, "leaf_audit_product.jsonl");
+const LEAF_TOKEN_SECRET = process.env.LEAF_TOKEN_SECRET;
+const LEAF_TOKEN_TTL_SEC = Number(process.env.LEAF_TOKEN_TTL_SEC || 600);
+const usedLeafTokenJti = new Map();
+
+if (!LEAF_TOKEN_SECRET) {
+  throw new Error("LEAF_TOKEN_SECRET is required");
+}
+if (!Number.isInteger(LEAF_TOKEN_TTL_SEC) || LEAF_TOKEN_TTL_SEC <= 0) {
+  throw new Error("LEAF_TOKEN_TTL_SEC must be a positive integer");
+}
 
 function writeSubmitVoteRecoveryLog(entry) {
   try {
@@ -48,6 +60,98 @@ function writeSubmitVoteRecoveryLog(entry) {
   } catch (err) {
     console.error("Failed to write submit-vote recovery log:", err);
   }
+}
+
+function writeLeafAuditLog(entry) {
+  try {
+    fs.mkdirSync(RECOVERY_LOG_DIR, { recursive: true });
+    fs.appendFileSync(LEAF_AUDIT_LOG_FILE, JSON.stringify(entry) + "\n");
+  } catch (err) {
+    console.error("Failed to write leaf audit log:", err);
+  }
+}
+
+function cleanupUsedLeafTokens(nowSec) {
+  for (const [key, exp] of usedLeafTokenJti.entries()) {
+    if (exp < nowSec) {
+      usedLeafTokenJti.delete(key);
+    }
+  }
+}
+
+function signLeafTokenPayload(payloadB64) {
+  return crypto
+    .createHmac("sha256", LEAF_TOKEN_SECRET)
+    .update(payloadB64)
+    .digest("base64url");
+}
+
+function issueLeafAdmissionToken(voteId) {
+  const nowSec = Math.floor(Date.now() / 1000);
+  cleanupUsedLeafTokens(nowSec);
+
+  const payload = {
+    voteId: String(voteId),
+    jti: crypto.randomBytes(16).toString("hex"),
+    exp: nowSec + LEAF_TOKEN_TTL_SEC
+  };
+  const payloadB64 = Buffer.from(JSON.stringify(payload)).toString("base64url");
+  const sigB64 = signLeafTokenPayload(payloadB64);
+  return `${payloadB64}.${sigB64}`;
+}
+
+function verifyLeafAdmissionToken(token, voteId) {
+  if (typeof token !== "string" || token.length === 0) {
+    return { ok: false, error: "Missing leafAdmissionToken" };
+  }
+
+  const parts = token.split(".");
+  if (parts.length !== 2) {
+    return { ok: false, error: "Invalid leafAdmissionToken format" };
+  }
+
+  const [payloadB64, providedSigB64] = parts;
+  const expectedSigB64 = signLeafTokenPayload(payloadB64);
+  const providedSig = Buffer.from(providedSigB64, "base64url");
+  const expectedSig = Buffer.from(expectedSigB64, "base64url");
+  if (
+    providedSig.length !== expectedSig.length ||
+    !crypto.timingSafeEqual(providedSig, expectedSig)
+  ) {
+    return { ok: false, error: "Invalid leafAdmissionToken signature" };
+  }
+
+  let payload;
+  try {
+    payload = JSON.parse(Buffer.from(payloadB64, "base64url").toString("utf8"));
+  } catch {
+    return { ok: false, error: "Invalid leafAdmissionToken payload" };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  cleanupUsedLeafTokens(nowSec);
+
+  if (String(payload.voteId) !== String(voteId)) {
+    return { ok: false, error: "leafAdmissionToken voteId mismatch" };
+  }
+  if (!Number.isInteger(payload.exp) || payload.exp < nowSec) {
+    return { ok: false, error: "leafAdmissionToken expired" };
+  }
+  if (typeof payload.jti !== "string" || payload.jti.length === 0) {
+    return { ok: false, error: "leafAdmissionToken missing jti" };
+  }
+
+  const tokenKey = `${payload.voteId}:${payload.jti}`;
+  if (usedLeafTokenJti.has(tokenKey)) {
+    return { ok: false, error: "leafAdmissionToken already used" };
+  }
+
+  return { ok: true, payload, tokenKey };
+}
+
+function consumeLeafAdmissionToken(payload) {
+  const tokenKey = `${payload.voteId}:${payload.jti}`;
+  usedLeafTokenJti.set(tokenKey, payload.exp);
 }
 
 // =====================================
@@ -200,7 +304,12 @@ router.post("/weight", (req, res) => {
 
     if (!row) return res.status(404).json({ error: "EOA not found in snapshot for this vote" });
 
-    return res.json({ status: "ok", weight: row.weight.toString() });
+    const leafAdmissionToken = issueLeafAdmissionToken(voteId);
+    return res.json({
+      status: "ok",
+      weight: row.weight.toString(),
+      leafAdmissionToken
+    });
   } catch (err) {
     console.error(err);
     return res.status(500).json({ error: "server error" });
@@ -211,7 +320,7 @@ router.post("/weight", (req, res) => {
 // 2) Leaf Registration (EOA not stored)
 // =====================================
 router.post("/leaf", async (req, res) => {
-  const { voteId, leaf } = req.body;
+  const { voteId, leaf, leafAdmissionToken } = req.body;
 
   if (!voteId || !leaf)
     return res.status(400).json({ error: "Missing voteId or leaf" });
@@ -223,6 +332,7 @@ router.post("/leaf", async (req, res) => {
 
   // #2 Fix: voteId별 mutex로 동시 요청 방지
   let release = null;
+  let verifiedTokenPayload = null;
   try {
     release = await acquireLeafLock(voteId);
     // Check if leaf is already registered
@@ -232,6 +342,12 @@ router.post("/leaf", async (req, res) => {
 
     if (existing) {
       // Already registered -> return existing data (no change)
+      writeLeafAuditLog({
+        voteId: String(voteId),
+        leaf,
+        ts: new Date().toISOString(),
+        result: "already-registered"
+      });
       return res.json({
         status: "ok",
         leaf,
@@ -243,10 +359,34 @@ router.post("/leaf", async (req, res) => {
       });
     }
 
+    const tokenCheck = verifyLeafAdmissionToken(leafAdmissionToken, voteId);
+    if (!tokenCheck.ok) {
+      writeLeafAuditLog({
+        voteId: String(voteId),
+        leaf,
+        ts: new Date().toISOString(),
+        result: `rejected:${tokenCheck.error}`
+      });
+      return res.status(403).json({ error: tokenCheck.error });
+    }
+    verifiedTokenPayload = tokenCheck.payload;
+
     // New leaf -> assign leafIndex
     const count = db.prepare(
       "SELECT COUNT(*) AS c FROM leaf_data WHERE voteId = ?"
     ).get(voteId).c;
+    const snapshotCount = db.prepare(
+      "SELECT COUNT(*) AS c FROM snapshot WHERE voteId = ?"
+    ).get(voteId).c;
+    if (count >= snapshotCount) {
+      writeLeafAuditLog({
+        voteId: String(voteId),
+        leaf,
+        ts: new Date().toISOString(),
+        result: "rejected:registration-cap"
+      });
+      return res.status(403).json({ error: "Leaf registration cap reached for this vote" });
+    }
 
     const leafIndex = count;
 
@@ -271,8 +411,15 @@ router.post("/leaf", async (req, res) => {
 
     // 온체인 성공 후 DB 저장 (트랜잭션)
     saveLeafDataTx(voteId, leaf, leafIndex, root, pathElements, pathIndices);
+    consumeLeafAdmissionToken(verifiedTokenPayload);
 
     console.log("✓ New leaf registered, index:", leafIndex);
+    writeLeafAuditLog({
+      voteId: String(voteId),
+      leaf,
+      ts: new Date().toISOString(),
+      result: "registered"
+    });
 
     return res.json({
       status: "ok",
@@ -286,6 +433,12 @@ router.post("/leaf", async (req, res) => {
 
   } catch (err) {
     console.error("leaf insert error:", err);
+    writeLeafAuditLog({
+      voteId: String(voteId),
+      leaf,
+      ts: new Date().toISOString(),
+      result: "error"
+    });
     return res.status(500).json({ error: err.message || "server error" });
   } finally {
     // #2 Fix: lock 해제 (획득한 경우에만)
