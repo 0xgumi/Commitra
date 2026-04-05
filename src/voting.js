@@ -537,11 +537,3 @@ window.submitVote = async function () {
     document.getElementById("submitButton").style.opacity = "1";
   }
 };
-
-window.getVoterData = function () {
-  return voterData;
-};
-
-window.getVoteInput = function () {
-  return voteInput;
-};
