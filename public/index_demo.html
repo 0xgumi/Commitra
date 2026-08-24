@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Commitra Demo</title>
+  <script src="https://cdn.jsdelivr.net/npm/snarkjs@0.6.11/build/snarkjs.min.js"></script>
+  <style>
+    .vote-select {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      display: none;
+    }
+    .vote-select select {
+      padding: 5px 10px;
+      font-size: 16px;
+      margin-left: 10px;
+    }
+    .vote-info {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #666;
+    }
+    .demo-badge {
+      background: #ff9800;
+      color: white;
+      padding: 2px 8px;
+      border-radius: 3px;
+      font-size: 12px;
+      margin-left: 10px;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Commitra <span class="demo-badge">DEMO</span></h2>
+
+  <button onclick="connectWallet()">Connect Wallet</button>
+
+  <div id="voteSelectSection" class="vote-select">
+    <label for="voteIdSelect"><strong>Select Vote:</strong></label>
+    <select id="voteIdSelect" onchange="onVoteSelected()">
+      <option value="">-- Select a vote --</option>
+    </select>
+    <div id="voteInfo" class="vote-info"></div>
+  </div>
+
+  <div id="registerSection" style="display: none; margin-top: 20px;">
+    <button onclick="generateVoterRecord()">Register & Generate Credentials</button>
+  </div>
+
+  <div id="voteButtons" style="display: none; margin-top: 20px;">
+    <h3>Select your vote:</h3>
+    <button onclick="selectVoteChoice(0)">YES</button>
+    <button onclick="selectVoteChoice(1)">NO</button>
+    <button onclick="selectVoteChoice(2)">ABSTAIN</button>
+  </div>
+
+  <div id="submitButton" style="display: none; margin-top: 20px;">
+    <button onclick="submitVote()">Submit Vote</button>
+  </div>
+
+  <pre id="out"></pre>
+
+  <script type="module" src="/dist/bundle_demo.js"></script>
+</body>
+</html>

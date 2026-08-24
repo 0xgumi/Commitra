@@ -1,0 +1,91 @@
+<!-- <!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>zk Keygen</title>
+  <script src="https://cdn.jsdelivr.net/npm/snarkjs@0.6.11/build/snarkjs.min.js"></script>
+</head>
+
+<body>
+  <h2>zk Keygen Test</h2>
+
+  <button onclick="connectWallet()">Connect Wallet</button>
+  <button onclick="generateVoterRecord()">Generate voter_record.json</button>
+
+  <div id="voteButtons" style="display: none; margin-top: 20px;">
+    <h3>Select your vote:</h3>
+    <button onclick="selectVoteChoice(0)">YES</button>
+    <button onclick="selectVoteChoice(1)">NO</button>
+    <button onclick="selectVoteChoice(2)">ABSTAIN</button>
+  </div>
+
+  <div id="submitButton" style="display: none; margin-top: 20px;">
+    <button onclick="submitVote()">투표 제출</button>
+  </div>
+
+  <pre id="out"></pre>
+
+  <script type="module" src="/dist/bundle.js"></script>
+</body>
+</html> -->
+
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>Commitra</title>
+  <script src="https://cdn.jsdelivr.net/npm/snarkjs@0.6.11/build/snarkjs.min.js"></script>
+  <style>
+    .vote-select {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      display: none;
+    }
+    .vote-select select {
+      padding: 5px 10px;
+      font-size: 16px;
+      margin-left: 10px;
+    }
+    .vote-info {
+      margin-top: 10px;
+      font-size: 14px;
+      color: #666;
+    }
+  </style>
+</head>
+
+<body>
+  <h2>Commitra</h2>
+
+  <button onclick="connectWallet()">Connect Wallet</button>
+
+  <div id="voteSelectSection" class="vote-select">
+    <label for="voteIdSelect"><strong>Select Vote:</strong></label>
+    <select id="voteIdSelect" onchange="onVoteSelected()">
+      <option value="">-- Select a vote --</option>
+    </select>
+    <div id="voteInfo" class="vote-info"></div>
+  </div>
+
+  <div id="registerSection" style="display: none; margin-top: 20px;">
+    <button onclick="generateVoterRecord()">Register & Generate Credentials</button>
+  </div>
+
+  <div id="voteButtons" style="display: none; margin-top: 20px;">
+    <h3>Select your vote:</h3>
+    <button onclick="selectVoteChoice(0)">YES</button>
+    <button onclick="selectVoteChoice(1)">NO</button>
+    <button onclick="selectVoteChoice(2)">ABSTAIN</button>
+  </div>
+
+  <div id="submitButton" style="display: none; margin-top: 20px;">
+    <button onclick="submitVote()">Submit Vote</button>
+  </div>
+
+  <pre id="out"></pre>
+
+  <script type="module" src="/dist/bundle.js"></script>
+</body>
+</html>
