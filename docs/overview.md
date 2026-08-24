@@ -1,119 +1,68 @@
 # System Overview
 
-Commitra is a **privacy-preserving voting system**
-that combines off-chain computation with on-chain verification
-using zero-knowledge proofs.
+Commitra is a research implementation of privacy-preserving, token-weighted voting that combines off-chain computation with on-chain Groth16 proof verification.
 
-The system is designed to ensure that:
-- individual votes remain private,
-- invalid or duplicate votes are rejected,
-- and the final tally is verifiable and immutable on-chain.
+The design goal is **data minimization**: the system publishes only the aggregate result, and by protocol design no individual vote is decrypted — while being explicit that, in the current single-coordinator version, this is a norm the operator follows, not a property cryptography enforces (see [`threat-model.md`](threat-model.md)).
 
-This document provides a **high-level architectural overview**
-without exposing implementation details.
+This document is a high-level orientation. The precise specification — circuit I/O, contract internals, API, proof scope — is [`REVISION19.md`](REVISION19.md).
 
 ---
 
 ## Design goals
 
-Commitra is built around the following principles:
+1. **Voter address privacy against chain observers**
+   The voter's EOA never appears on-chain; all transactions are relayed by the coordinator. Nothing on-chain links an address to a vote.
 
-1. **Privacy by design**  
-   Individual vote choices are never revealed,
-   even to the system operator.
+2. **Aggregate-only decryption by construction**
+   Votes are ElGamal-encrypted and homomorphically summed; the tally pipeline decrypts the sum, not the parts. (The single coordinator key *could* decrypt parts — see trust assumptions.)
 
-2. **Verifiable correctness**  
-   All critical steps are enforced or validated on-chain.
+3. **Verifiable computation, precisely scoped**
+   Vote validity and tally aggregation/decryption are ZK-proven and verified on-chain. What each proof does and does not constrain is stated exactly in [`REVISION19.md`](REVISION19.md) §17.3.
 
-3. **Gas efficiency**  
-   Heavy computation is performed off-chain,
-   while correctness is enforced via succinct proofs.
-
-4. **Practical UX**  
-   Voters can complete registration, voting,
-   and proof generation in a single browser session.
+4. **Practical UX**
+   Registration, encryption, and proof generation complete in a single browser session (~30 s proving time). Voters pay no gas.
 
 ---
 
-## High-level architecture
+## Components
 
-The system consists of three primary components:
+### 1. Client (browser)
 
-### 1. Client (Browser)
+- Derives a deterministic BabyJubJub keypair and secrets from one wallet signature
+- Encrypts the vote: `encrypt(weight)` for the chosen option, `encrypt(0)` for the others
+- Generates the Groth16 vote proof (`vote.wasm` + `vote_final.zkey`, served statically)
 
-- Generates cryptographic secrets locally
-- Encrypts vote choices
-- Generates zero-knowledge proofs
-- Never exposes private inputs
+### 2. Coordinator (off-chain server)
 
-### 2. Coordinator (Off-chain service)
+- Manages per-vote snapshots (EOA → weight) and the Merkle tree of voter commitments
+- Relays all transactions; pays all gas
+- After closing: homomorphically sums ciphertexts, decrypts the aggregate, generates the tally proof
 
-- Manages vote lifecycle orchestration
-- Relays transactions to the blockchain
-- Aggregates encrypted votes for tallying
+The server stores leaves without EOAs. It could, however, correlate EOA↔leaf at registration time through session metadata — the unlinkability guarantee is against chain observers, not against the server itself.
 
-The coordinator **cannot link voters to their votes**
-and cannot alter valid results without detection.
+### 3. Smart contracts (Ethereum Sepolia)
 
-### 3. Smart contracts (On-chain)
-
-- Verify zero-knowledge proofs
-- Enforce vote validity and uniqueness
-- Record final tally results immutably
+- `VotingContract` + auto-generated verifier: checks each vote proof, enforces per-vote nullifier uniqueness, records Merkle roots
+- `TallyContract` + auto-generated verifier: checks the tally proof and records the final result immutably per voteId
 
 ---
 
 ## Voting lifecycle
 
-At a high level, each vote session follows this flow:
-
-1. **Registration**  
-   Eligible participants register commitments
-   without revealing their identity.
-
-2. **Voting**  
-   Votes are encrypted and submitted
-   together with a zero-knowledge proof.
-
-3. **Submission**  
-   Proofs are verified on-chain,
-   and duplicate votes are rejected.
-
-4. **Tally**  
-   Encrypted votes are aggregated off-chain,
-   and the final result is verified on-chain
-   using a zero-knowledge proof.
+1. **Snapshot** — coordinator registers the eligible EOA → weight list for a voteId
+2. **Registration** — voter derives secrets, registers a commitment leaf (gated by a short-lived admission token issued after the snapshot check)
+3. **Voting** — encrypt, prove, submit; the server verifies the ciphertexts match the proof's public hash before relaying on-chain
+4. **Finalize** — voting closed on-chain; batch padded to 100 with zero-weight dummy votes
+5. **Tally** — homomorphic sum → aggregate decryption (BSGS discrete log) → tally proof → on-chain result
 
 ---
 
 ## Multi-vote support
 
-Commitra supports multiple independent vote sessions.
-
-- Each vote session is identified by a unique identifier
-- Vote validity, nullifiers, and results are isolated per session
-- Participants may take part in multiple sessions
-  without linkability across votes
+Vote sessions are isolated per `voteId`: separate snapshots, Merkle trees, nullifier sets, and results. The same EOA can participate in multiple sessions; nullifiers are voteId-scoped, so votes are not linkable across sessions on-chain.
 
 ---
 
-## Verification-first design
+## Status
 
-Commitra is intentionally structured so that:
-
-- Correctness can be verified without access to source code
-- On-chain artifacts are sufficient to detect manipulation
-- Off-chain computation cannot silently affect outcomes
-
-For verification steps, see `docs/verification.md`.
-
----
-
-## Summary
-
-Commitra is a **production-ready voting system**
-focused on privacy, verifiability, and practical deployment.
-
-The system demonstrates that secure voting
-can be achieved without sacrificing usability
-or relying on opaque trust assumptions.
+v1.5 implementation, exercised end-to-end on Sepolia ([`../samples/`](../samples/)). Known gaps between "implemented" and "proven" are the core of the published material — start with the proof-scope table in [`REVISION19.md`](REVISION19.md) §17.3 and the [`threat-model.md`](threat-model.md). This is not a production system.

@@ -1,71 +1,43 @@
 # Roadmap
 
-This document outlines the **confirmed development direction**
-and **research-oriented extensions** of Commitra.
-
-Items are explicitly categorized to avoid ambiguity.
+Direction, not commitments. No dates. Items are ordered by the audit findings: the gaps that most undermine the system's claims get fixed first. Problem statements are given; detailed designs are intentionally not published here.
 
 ---
 
-## v1.5 (Current)
+## Near term — server & operational hardening (no circuit changes)
 
-- End-to-end verifiable voting
-- Encrypted ballots with private tally
-- On-chain proof verification
-- Multi-vote session support
-- Product-ready deployment
+Close the known implementation issues listed in [`REVISION19.md`](REVISION19.md) §17.5, and add server-side enforcement that doesn't require new circuits:
 
-Status: **Complete**
+- Proxy-aware rate limiting and auth-failure throttling
+- Ciphertext point validation (on-curve, prime-order subgroup, non-identity) at submission time — a server-side mitigation for the circuit gap, explicitly recorded as *mitigated, not resolved*
+- Durable dedupe of pubkey commitments per vote
+- Fail-fast bounds on batch size and snapshot weights (BSGS-recoverable range)
+- Authenticated, once-per-EOA leaf admission for the closed-snapshot configuration
 
----
+## Vote circuit revision — input integrity
 
-## v2 (Confirmed direction)
+**Problem**: the current vote proof does not constrain what is encrypted. Malformed points, out-of-range plaintexts, and weights unbound to the snapshot all pass.
 
-The following items are planned and actively designed:
+The next vote circuit must prove: well-formed ElGamal ciphertexts on the curve's prime-order subgroup, plaintexts in `{0, weight}` with exactly one choice carrying the full weight, and the committed weight bound to the eligibility set. This requires a new trusted setup ceremony (and a real multi-party one — see [`PROVENANCE.md`](PROVENANCE.md) for why).
 
-### Threshold decryption
-- Replace single coordinator key
-- k-of-n distributed key shares
-- Partial decryption with on-chain verification
+## Tally binding & coordinator de-trusting
 
-### Scalability
-- Support for large voter sets (10,000+)
-- Improved aggregation efficiency
-- Reduced proof generation overhead
+**Problem 1 — batch binding**: the tally proof commits to a batch, but the chain never checks that batch against the submitted votes. The contract should be able to enforce "the tallied batch is exactly the submitted set" (and bind the voteId inside the proof).
 
-### Automation
-- Time-based vote finalization
-- Reduced manual intervention
+**Problem 2 — single decryption key**: aggregate-only decryption must become enforced rather than normative. Direction: threshold decryption (k-of-n key shares, partial decryptions with proofs), which also removes the individual-decryption capability from any single party.
 
----
+**Problem 3 — scale**: one fixed batch of 100 does not scale; aggregation needs to handle 10k+ votes without proportionally growing a single circuit.
 
-## Research & exploratory items
+## Exploratory
 
-The following are **research directions**, not commitments:
+Titles and problem statements only:
 
-- Cross-chain voting settlement
-- Alternative cryptographic constructions
-- Advanced privacy-preserving analytics
-
-These items are evaluated based on maturity
-and real-world applicability.
+- **Multi-chain snapshots** — one eligibility set aggregated from balances on several chains
+- **Cross-chain result settlement** — vote where it's cheap, verify the tally proof where governance executes
+- **Confidential outcomes** — settings where even the aggregate should be revealed selectively
 
 ---
 
-## Design philosophy
+## Not on the roadmap
 
-Commitra prioritizes:
-
-- Correctness over novelty
-- Verifiability over opacity
-- Practical deployment over theoretical completeness
-
----
-
-## Summary
-
-The roadmap reflects a balance between
-engineering certainty and research ambition.
-
-Confirmed items focus on removing remaining trust assumptions,
-while exploratory work remains clearly marked as such.
+- Receipt-freeness / anti-collusion — an intentional scope decision, not a pending fix. See [`threat-model.md`](threat-model.md)

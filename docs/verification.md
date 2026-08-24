@@ -1,158 +1,66 @@
 # Verification Guide
 
-This document explains **what can be verified today** for Commitra
-without access to any private source code.
+This document explains what you can verify about Commitra — from the public on-chain record, and now also from the source in this repository — and, just as importantly, **what the on-chain record alone does not establish**.
 
-Verification is based on **on-chain artifacts**, **transaction records**,
-and **zero-knowledge proof validation**, all of which are publicly observable.
+An earlier version of this guide claimed that on-chain artifacts suffice to detect omission or manipulation of votes, and that "the tally corresponds exactly to submitted votes" is verifiable. Those claims overstated the system; the honest scope is below.
 
 ---
 
-## Scope of verification
+## 1. What a transaction shows
 
-Using the materials linked in this repository, you can verify that:
+### Vote submission (`VotingContract.submitVote`)
 
-- Votes are submitted with valid zero-knowledge proofs
-- Double voting is prevented
-- Votes are tallied correctly without revealing individual choices
-- Final results are immutably recorded on-chain
-- The demo and production samples follow clearly stated assumptions
+For any recorded vote transaction (examples: [`../samples/demo/walkthrough.md`](../samples/demo/walkthrough.md), [`../samples/production/vote-sample.md`](../samples/production/vote-sample.md)):
 
-This guide does **not** describe how the system is implemented.
-It focuses exclusively on **where and how correctness can be checked**.
+- The transaction succeeded, meaning the on-chain Groth16 verifier accepted the proof
+- The proof's public signals include the Merkle root (which the contract required to be registered), the nullifier (which the contract required to be fresh for this voteId), and the ciphertext hash
+- A `VoteSubmitted` event was emitted
 
----
+This establishes: *someone holding secrets for a registered leaf produced a valid proof over exactly these ciphertext hashes, with a nullifier not seen before in this voteId.*
 
-## 1. Vote submission verification
+It does **not** establish that the ciphertexts are well-formed encryptions of an in-range vote — the circuit does not constrain that. Nor does it establish one-vote-per-voter: the nullifier is not circuit-bound to the leaf, so the same leaf holder could have submitted other votes under other nullifiers (see [`threat-model.md`](threat-model.md)).
 
-### What to verify
-- Each vote submission corresponds to a successful on-chain transaction
-- The submitted proof is verified on-chain
-- Duplicate voting is prevented via vote-scoped nullifiers
+### Tally finalization (`TallyContract.finalizeTally`)
 
-### How to verify
-1. Open a representative vote submission transaction:
-   - Demo walkthrough:
-     `samples/demo/walkthrough.md`
-   - Production sample:
-     `samples/production/vote-sample.md`
+- The transaction succeeded: the tally verifier accepted the proof, voting was closed, dummy padding was registered, and the coordinator public key matched
+- The recorded result equals the proof's public `tallyResult` signals
 
-2. In the transaction details, confirm:
-   - The transaction status is **Success**
-   - A zero-knowledge proof verification occurred
-   - A vote submission event was emitted
+This establishes: *the published result is the correct homomorphic sum and decryption of **a** batch of 100 ciphertext sets that hashes to the committed batch hash.*
 
-3. Confirm that:
-   - The same participant cannot submit two votes
-   - Attempts to reuse a nullifier are rejected on-chain
+It does **not** establish that this batch equals the set of votes submitted on-chain: the contract never reconstructs the batch hash from `VoteSubmitted` events. Comparing the on-chain event count and hashes against the tallied batch is possible only out-of-band today. This is the single most important limitation of the current verification story.
 
 ---
 
-## 2. Vote integrity verification
+## 2. What you can verify from the source (this repository)
 
-### What to verify
-- Submitted votes cannot be altered or removed
-- Any omission or manipulation would be detectable
+With the code public, deeper checks are possible:
 
-### How to verify
-1. Each vote submission includes a cryptographic commitment
-   recorded on-chain as part of the transaction data.
+1. **Circuits**: read [`../circuits/`](../circuits/) — `vote.circom` and `tally.circom` are short. You can confirm directly which constraints exist and which (ciphertext validity, plaintext range, snapshot binding, batch binding) do not. The proof-scope table in [`REVISION19.md`](REVISION19.md) §17.3 is checkable against the source.
+2. **Verifier correspondence**: rebuild the circuits and compare the generated verifier contracts against the deployed bytecode, and the verification keys against the published zkeys. Procedure: [`BUILD.md`](BUILD.md); artifact hashes: [`PROVENANCE.md`](PROVENANCE.md).
+3. **Server behavior**: the relaying, admission-token, and hash-binding logic is in [`../src/routes/`](../src/routes/) — including the checks the server performs that the circuits do not.
+4. **End-to-end**: run the full lifecycle locally against Sepolia using [`../usage/`](../usage/).
 
-2. These commitments are later bound into the tally process
-   through a public batch hash.
-
-3. The batch hash used for tallying can be traced back to
-   the set of submitted votes.
-
-This ensures that the tally corresponds exactly to the submitted votes.
+Note the setup caveat: both zkeys come from a single phase-2 contribution ([`PROVENANCE.md`](PROVENANCE.md)), so "the verifier accepted the proof" is only as strong as that setup.
 
 ---
 
-## 3. Tally verification
+## 3. Demo self-verification
 
-### What to verify
-- The final tally is computed from the submitted encrypted votes
-- The tally result is validated by a zero-knowledge proof
-- The result is stored immutably on-chain
-
-### How to verify
-1. Open a representative tally finalization transaction:
-   - Demo walkthrough:
-     `samples/demo/walkthrough.md`
-   - Production sample:
-     `samples/production/tally-sample.md`
-
-2. In the transaction details, confirm:
-   - The transaction status is **Success**
-   - A zero-knowledge proof verification occurred
-   - The final vote counts were recorded on-chain
-
-3. Verify that:
-   - The recorded result matches the public inputs of the proof
-   - The tally was finalized only after voting was closed
+The most direct verification available to an outside party is the demo used as a **self-verification device**: vote from several wallets you control, record your own weights and choices, and check that the finalized on-chain result equals your sums. Since all voters are you, batch substitution or omission would be visible to you directly. See [`demo.md`](demo.md).
 
 ---
 
-## 4. Demo vs production verification context
+## 4. Honest summary
 
-Verification artifacts are grouped into two categories:
+| Claim | Verifiable today? |
+|-------|-------------------|
+| Each counted-as-submitted vote carried a valid membership proof and fresh nullifier | Yes — on-chain |
+| Each voter voted at most once | **No** — nullifiers are single-use, but not circuit-bound to the voter's leaf |
+| No vote choice or voter address is on-chain | Yes — inspect the transactions |
+| Result = correct sum + decryption of a committed batch | Yes — on-chain proof |
+| The committed batch = the actual submitted votes | **No** — not enforced or checkable on-chain; out-of-band only |
+| Ballots are well-formed encryptions of in-range votes | **No** — not constrained by the circuit |
+| The operator decrypted only the aggregate | **No** — unprovable under single-key ElGamal |
+| The deployed verifiers match these circuits | Yes — by rebuilding ([`BUILD.md`](BUILD.md)) |
 
-### Demo samples
-- Generated from the public demo environment
-- Use simplified assumptions for accessibility
-- Intended to demonstrate end-to-end verifiability
-
-See:
-- `samples/demo/README.md`
-
-### Production samples
-- Generated under intended production assumptions
-- Use snapshot-based voting weights
-- Reflect the system’s real security model
-
-See:
-- `samples/production/README.md`
-
-This separation ensures that demo constraints
-are not confused with production limitations.
-
----
-
-## 5. What is enforced on-chain
-
-From the on-chain records alone, you can verify that:
-
-- Invalid votes cannot be accepted
-- Double voting is prevented
-- The tally corresponds to the submitted votes
-- The final result cannot be modified after publication
-
-No trust in off-chain computation is required
-to validate the correctness of the final outcome.
-
----
-
-## 6. What this verification does not cover
-
-This guide intentionally does **not** expose:
-
-- Circuit source code
-- Cryptographic parameters
-- Key material or key management details
-- Internal server logic
-
-These components are outside the scope of public verification
-and are not required to validate correctness of the results.
-
----
-
-## Summary
-
-Commitra is verifiable without code access because:
-
-- All critical state transitions are enforced on-chain
-- Zero-knowledge proofs bind off-chain computation to on-chain verification
-- Public artifacts are sufficient to detect manipulation or inconsistency
-
-For demo assumptions, see `docs/demo.md`.  
-For trust assumptions, see `docs/threat-model.md`.
+For the mechanism behind each row: [`REVISION19.md`](REVISION19.md) §17.3. For the adversary-oriented view: [`threat-model.md`](threat-model.md).

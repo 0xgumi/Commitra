@@ -1,15 +1,8 @@
-# Production Samples
+# Product-Configuration Samples
 
-These samples reflect Commitra's intended production configuration.
+These samples are recorded transactions from Commitra's **Product configuration** — the closed-eligibility deployment where voting weights come from a predefined snapshot (EOA → weight) rather than demo auto-registration.
 
-They are generated under:
-
-- Snapshot-based voting weights
-- Isolated vote sessions (`voteId` separation)
-- Full security assumptions as described in `docs/threat-model.md`
-
-These samples are provided as **representative evidence**,
-not as a reproducible test suite.
+They are **representative records of author-operated runs**, not a reproducible test suite and not evidence of adversarial robustness. The trust assumptions in [`../../docs/threat-model.md`](../../docs/threat-model.md) apply to these runs exactly as documented — including the single-coordinator key and the unbound tally batch.
 
 ---
 
@@ -17,14 +10,12 @@ not as a reproducible test suite.
 
 | File | Description |
 |------|-------------|
-| `vote-sample.md` | Representative vote submission transaction |
-| `tally-sample.md` | Representative tally finalization transaction |
+| [`vote-sample.md`](vote-sample.md) | A vote submission transaction (snapshot-based weights) |
+| [`tally-sample.md`](tally-sample.md) | The corresponding tally finalization transaction |
 
 ---
 
-## How to verify
+## How to read them
 
-1. Open each transaction link in a block explorer
-2. Confirm the transaction status is **Success**
-3. Verify that the expected events were emitted
-4. Cross-reference with `docs/verification.md` for detailed steps
+1. Open each transaction link in a block explorer and confirm the status is **Success** and the expected event (`VoteSubmitted` / `TallyFinalized`) was emitted
+2. What a successful transaction does and does not establish is spelled out in [`../../docs/verification.md`](../../docs/verification.md) — read the vote and tally sections there rather than taking "Success" as a blanket guarantee

@@ -1,7 +1,7 @@
-# Production Vote Submission Sample
+# Product-Configuration Vote Submission Sample
 
-**Environment:** Production assumptions  
-**Network:** Ethereum Sepolia  
+**Environment:** Product configuration (snapshot-based weights)
+**Network:** Ethereum Sepolia
 **Vote session:** voteId = 11
 
 ---
@@ -26,12 +26,19 @@
 
 ---
 
-## What this demonstrates
+## What this transaction establishes
 
-- Vote validity enforced via on-chain ZK proof verification
-- Vote-scoped nullifier prevents double voting
-- Voter identity remains unlinkable to the submitted vote
-- Encrypted vote content is not revealed
+- The on-chain Groth16 verifier accepted a proof of Merkle membership under a registered root, with a fresh voteId-scoped nullifier (this nullifier can never be reused)
+- The proof's public signals bind a specific ciphertext hash — the ciphertexts the server stores for tallying are the ones this proof committed to
+- No voter EOA and no vote choice appear in the transaction (submitted by a coordinator wallet)
+
+## What it does not establish
+
+- That the encrypted ballot is a well-formed encryption of an in-range vote — the current circuit does not constrain this
+- That this leaf holder voted only once — the nullifier is not circuit-bound to the leaf, so a modified client could vote again under a different nullifier
+- That the committed weight matches the snapshot entry — server-gated, not circuit-bound
+
+See [`../../docs/verification.md`](../../docs/verification.md) and [`../../docs/threat-model.md`](../../docs/threat-model.md).
 
 ---
 
@@ -39,5 +46,5 @@
 
 1. Open the transaction in the explorer
 2. Confirm status is **Success**
-3. Check for `VoteSubmitted` event in logs
-4. Verify nullifier is unique for this voteId
+3. Check for the `VoteSubmitted` event in logs
+4. Confirm the nullifier had not appeared before for this voteId

@@ -1,118 +1,47 @@
 # Demo Samples
 
-This directory documents the **Commitra demo environment**.
+This directory documents recorded runs of the **Commitra demo environment** on Ethereum Sepolia.
 
-The demo is designed to allow external reviewers, researchers,
-and community members to **interactively verify** Commitra's
-zero-knowledge voting system **without accessing private code**.
+The demo is an **honest-client flow demonstration**: it shows the full lifecycle working end-to-end with cooperating participants. It does not demonstrate adversarial robustness — the trust assumptions and proof-scope gaps in [`../../docs/threat-model.md`](../../docs/threat-model.md) apply here unchanged.
 
 ---
 
 ## End-to-end walkthrough
 
-A complete vote lifecycle has been recorded and verified on Ethereum Sepolia.
+A complete vote lifecycle recorded and verifiable on Sepolia:
 
-**[View the full walkthrough](./walkthrough.md)** — covers vote creation,
-three encrypted vote submissions, vote closure, and on-chain tally finalization.
+**[View the full walkthrough](./walkthrough.md)** — vote creation, three encrypted vote submissions, vote closure, and on-chain tally finalization, with browser screenshots and transaction links.
 
-The walkthrough includes browser screenshots, transaction links,
-and a manual verification that the on-chain result matches the individual votes.
+The walkthrough follows the **self-verification pattern**: all three voters were wallets controlled by the operator, so the on-chain result could be checked directly against known weights and choices. That is the strongest check the current system supports from the outside (see [`../../docs/verification.md`](../../docs/verification.md) §3).
 
 ---
 
-## Purpose of the demo
+## How the demo differs from the Product configuration
 
-The Commitra demo serves a different purpose than production samples.
+| Aspect | Product configuration | Demo |
+|--------|----------------------|------|
+| Eligibility | Predefined snapshot (EOA → weight) | Auto-registered on first weight request |
+| Voting weight | Fixed by snapshot | Random, 1–100, at registration |
+| Participants per vote | Snapshot size | Capped at 80 |
+| Network | Ethereum Sepolia | Ethereum Sepolia |
 
-- **Production samples** demonstrate representative, finalized evidence
-  under full security assumptions.
-- **Demo** provides a live environment where third parties can:
-  - Cast votes
-  - Observe on-chain verification
-  - Confirm tally correctness
-  - Validate privacy guarantees
+Circuits, contracts, encryption, proofs, and the tally pipeline are identical; only the eligibility policy differs. Full context: [`../../docs/demo.md`](../../docs/demo.md).
 
-The demo is explicitly designed for **external verification**.
-
----
-
-## How the demo differs from production
-
-The demo environment intentionally differs from the production system
-to enable open participation.
-
-### Key differences
-
-| Aspect | Production | Demo |
-|------|-----------|------|
-| Voting weights | Snapshot-based | Randomly assigned (1–80) |
-| Vote sessions | Multiple `voteId`s | Single `voteId` per demo |
-| Participants | Predefined voters | Open to demo participants |
-| Scale | Configurable | Max 80 votes |
-| Chain | Ethereum Mainnet (planned) / L2 | Ethereum Sepolia |
-
-### Why random weights?
-
-In production, voting weights are derived from a predefined snapshot.
-
-In the demo, participant addresses are unknown in advance.
-To preserve the structure of weighted voting,
-each participant is assigned a **random weight between 1 and 80**
-at registration time.
-
-This mechanism replaces the snapshot **for demonstration purposes only**.
+(An earlier version of this page stated demo weights of "1–80"; the correct range in the code is 1–100. The 80 figure is the participant cap.)
 
 ---
 
-## What you can verify in the demo
+## What a demo run shows
 
-Even with these simplifications, the demo preserves all **core security properties**:
+- Ballots encrypted client-side; browser-generated Groth16 proofs verified on-chain
+- No vote choice and no voter EOA in any on-chain transaction
+- Per-vote nullifier single-use, so the standard client cannot vote twice (a modified client could — the nullifier is not circuit-bound to the voter's leaf; see the threat model)
+- A finalized on-chain result that matches participant-known sums when you vote with your own wallets
 
-- Votes are encrypted client-side
-- Individual vote choices are never revealed on-chain
-- Each address can vote only once
-- Votes are aggregated homomorphically
-- Final results are verified via ZK proofs
-- The tally result is immutably recorded on-chain
-
-Participants can independently verify:
-
-- Their vote was accepted on-chain
-- The final tally transaction succeeded
-- The recorded result matches the emitted events
+What it cannot show: that malicious clients or a malicious coordinator couldn't break these properties. That boundary is documented, precisely, in [`../../docs/REVISION19.md`](../../docs/REVISION19.md) §17.3.
 
 ---
 
-## Demo workflow (high-level)
+## Access
 
-1. Request a demo access code
-2. Connect a wallet (EOA)
-3. Receive a random voting weight
-4. Cast a vote (YES / NO / ABSTAIN)
-5. Wait for the voting period to close
-6. Verify the tally result on-chain
-
-No gas fees are required from participants.
-
----
-
-## Access to the demo
-
-Demo access is currently granted **by request**.
-
-If you are interested in testing the system, please reach out via:
-
-- X (Twitter): https://x.com/0xgumi
-
----
-
-## Important note
-
-The demo exists to validate **verifiability and privacy**,
-not to showcase internal cryptographic implementations.
-
-Circuit code, proving keys, and coordinator secrets
-are intentionally not exposed.
-
-For architectural details and trust assumptions,
-refer to the documentation in the `docs/` directory.
+Demo access is granted by request — DM [@0xgumi](https://x.com/0xgumi) with a sentence about your context. Participants pay no gas.

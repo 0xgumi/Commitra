@@ -1,126 +1,121 @@
 # Commitra
 
-Commitra is a **product-ready zero-knowledge voting system (v1.5)** designed to provide
-**privacy-preserving, verifiable, and gas-efficient voting** with on-chain enforcement.
+Commitra is a **research implementation** of privacy-preserving, token-weighted voting for the EVM ecosystem, built on homomorphic aggregation: votes are ElGamal-encrypted in the browser, homomorphically summed, and **only the aggregate is ever decrypted**. Vote validity and tally computation are proven with Groth16 ZK proofs and verified on-chain (Ethereum Sepolia).
 
-The system enables anonymous voting while ensuring that:
-- every submitted vote is valid,
-- the final tally is not tampered with,
-- and all results are verifiable on-chain without revealing individual choices.
+This repository contains the **full source**: circuits, contracts, server, client, and operational scripts, together with the protocol specification and a precise map of what the proofs do and do not guarantee.
 
-This repository intentionally **does not publish source code**.
-Instead, it serves as a **verification and demo access portal** for reviewers, researchers,
-and partners evaluating the system.
+**What this is:** a minimal construction (two circuits, one curve, browser-side proving) implemented end-to-end and exercised on a public testnet, published together with the boundary of what it actually proves — drawn with the help of three independent code audits.
+
+**What this is not:** a production-ready system. It has known, documented gaps between "implemented" and "proven" (see below), a single-operator trust model, and a deliberately small scope (100 votes per tally batch). Earlier versions of this repository described the system as "product-ready"; that claim was wrong and is retracted.
 
 ---
 
-## What this is
+## Design in one paragraph
 
-- A **zero-knowledge voting system** with encrypted ballots and ZK-verified tallying
-- **Product-ready v1.5 implementation**, deployed and end-to-end verified
-- **On-chain verifiable results**, with off-chain computation for gas efficiency
-- Designed for real voting scenarios, not a research-only prototype
-
-**Privacy guarantees:**
-- No one can tell who voted for what — ZK proofs verify eligibility without revealing identity
-- Even the server does not know — vote choices are encrypted client-side before submission
-- No voter address appears on-chain — all transactions are relayed by the coordinator
+Eligible voters are listed in a per-vote snapshot (EOA → weight). Each voter derives a deterministic keypair from a wallet signature, registers a commitment leaf into a Merkle tree, and submits ElGamal ciphertexts — `encrypt(weight)` for the chosen option, `encrypt(0)` for the rest — with a Groth16 proof of Merkle membership, nullifier correctness, and an EdDSA signature binding the ciphertexts. A coordinator relays all transactions (voter EOAs never appear on-chain), homomorphically sums the ciphertexts after closing, decrypts **the aggregate only**, and submits a second Groth16 proof that the published result is the correct decryption of the sum of a committed batch. Full specification: [`docs/REVISION19.md`](docs/REVISION19.md).
 
 ---
 
-## What’s new in v1.5 (Revision 17)
+## What the proofs prove — and what they don't
 
-- Support for **multiple independent votes** via `voteId` separation  
-- Vote-scoped nullifiers to prevent double voting across sessions  
-- Strengthened tally integrity using encrypted batch hashing  
-- Single-visit UX: registration, voting, and proof generation in one flow  
-- Clear separation between demo assumptions and production assumptions  
+The honest version, condensed (full statement: [`docs/REVISION19.md`](docs/REVISION19.md) §17.3):
 
-> A detailed overview is available in [`docs/overview.md`](docs/overview.md).
+| Proven | Not proven (current gaps) |
+|--------|---------------------------|
+| Merkle membership under an accepted root | Ciphertexts are well-formed ElGamal encryptions (valid curve points) |
+| Each nullifier is spendable once per vote (on-chain) | Plaintexts are in `{0, weight}`, one choice only |
+| Ciphertexts stored for tally are exactly those the proof committed to (server-checked) | **One vote per voter** — the nullifier is not circuit-bound to the leaf or key; a modified client can derive fresh nullifiers from the same leaf and re-vote |
+| Tally = correct sum + decryption of a committed batch | Committed weight equals the snapshot weight (server-gated, not circuit-bound) |
+| — | The tallied batch equals the canonical on-chain submitted set |
+| — | The coordinator decrypted only the aggregate (single-key ElGamal cannot prove this) |
+
+Consequences, stated plainly: a malicious **voter** with a modified client could corrupt the aggregate with malformed ciphertexts, or vote multiple times from one leaf; a malicious **coordinator** could tally a different batch than what was submitted, and could technically decrypt individual ciphertexts. The implementation demonstrates the honest-participant flow end-to-end; it does not yet remove these trust assumptions. See [`docs/threat-model.md`](docs/threat-model.md).
 
 ---
 
-## What you can verify today
+## Trust assumptions (v1.5)
 
-Without accessing any private code, you can verify that Commitra works end-to-end.
+- **Single coordinator** holds the ElGamal key: aggregate-only decryption is a protocol norm, not an enforced property.
+- **Relayer censorship**: the coordinator can decline to relay a vote.
+- **Server-side registration**: the server does not store an EOA↔leaf link, but could correlate one at registration time (timing/session). Unlinkability claims are scoped to **chain observers**.
+- **Trusted setup**: both proving keys were produced with a **single phase-2 contribution** by the author. Soundness rests on that contribution's randomness being discarded. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
+- **Not receipt-free** (intentional scope): a voter can reveal ElGamal randomness to prove their vote. Anti-collusion is out of scope; this design prioritizes limiting what everyone — operator included — learns.
 
-### Public demo verification
-- Vote submissions verified on Ethereum Sepolia  
-- On-chain tally finalized with a zero-knowledge proof  
-- Final results stored immutably on-chain  
+---
 
-End-to-end demo walkthrough:
-- [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md)
+## Known issues (deferred, tracked)
 
-### Production-assumption verification
-- Snapshot-based voting weights  
-- Full vote lifecycle executed under intended security assumptions  
+The following implementation issues are known and deliberately deferred; none affects the honesty of the claims above, and no live vote is running on the Product deployment:
 
-Representative production samples:
-- [`samples/production/vote-sample.md`](samples/production/vote-sample.md)
-- [`samples/production/tally-sample.md`](samples/production/tally-sample.md)
+- Rate limiting is not Cloudflare-aware (keys on the tunnel-local address, not `CF-Connecting-IP`); auth failures are not separately throttled
+- Error responses may echo internal error strings
+- The browser prover loads snarkjs from a CDN (no pinned local copy)
+- A finalize edge case at exactly 100 real votes blocks tally finalization
+- Server-side ciphertext point validation (on-curve/subgroup) is absent — the deeper circuit-level issue is in the table above
+- `package.json` still declares `"license": "ISC"`; the repository license is GPL-3.0 (`LICENSE`) — the field is stale and pending correction
 
-A step-by-step verification checklist is provided in
-[`docs/verification.md`](docs/verification.md).
+Full list: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
+
+---
+
+## Audits
+
+Three independent code audits (2026-07-05, 2026-07-23, 2026-08-23) reviewed the implementation. Their consensus findings — unauthenticated EOA admission, nullifier–leaf non-binding, unproven ciphertext validity, unbound tally batch — are what drew the proof-scope map above and drive the roadmap. The audits were of the code in this repository; audit write-ups are not published, but every consensus finding is reflected in [`docs/threat-model.md`](docs/threat-model.md) and the spec.
+
+---
+
+## Repository layout
+
+| Path | Contents |
+|------|----------|
+| `circuits/` | `vote.circom`, `tally.circom` (Groth16, BabyJubJub, Poseidon) |
+| `contracts/` | Voting + tally contracts and snarkjs-generated verifiers |
+| `src/` | Express server, SQLite modules, tally pipeline, browser client source |
+| `scripts/` | Snapshot creation, finalize, on-chain setup |
+| `public/` | Client artifacts incl. `vote.wasm`, `vote_final.zkey` (browser proving) |
+| `usage/` | Step-by-step operational guides |
+| `docs/` | [`REVISION19.md`](docs/REVISION19.md) (spec) · [`threat-model.md`](docs/threat-model.md) · [`verification.md`](docs/verification.md) · [`PROVENANCE.md`](docs/PROVENANCE.md) · [`BUILD.md`](docs/BUILD.md) |
+| `samples/` | Recorded end-to-end runs on Sepolia (transactions, screenshots) |
+
+---
+
+## Deployments (Ethereum Sepolia)
+
+| | VotingContract | TallyContract |
+|---|---|---|
+| Product configuration | [`0xdd200F4cb1f559D6c3FC76752B9e6221e32254e1`](https://sepolia.etherscan.io/address/0xdd200F4cb1f559D6c3FC76752B9e6221e32254e1) | [`0xFda0641b252409bA40e43d0303e70CCbbC3b270A`](https://sepolia.etherscan.io/address/0xFda0641b252409bA40e43d0303e70CCbbC3b270A) |
+| Demo | [`0x896fB9AcbD6A2a3A2Db9635D3215c0eC5ffc33D9`](https://sepolia.etherscan.io/address/0x896fB9AcbD6A2a3A2Db9635D3215c0eC5ffc33D9) | [`0x0323e975db2a48f82c84b48dDD63c0eA6bF66198`](https://sepolia.etherscan.io/address/0x0323e975db2a48f82c84b48dDD63c0eA6bF66198) |
+
+Recorded runs: [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md), [`samples/production/`](samples/production/). Deployment dates and artifact hashes: [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
 
 ---
 
 ## Demo
 
-A public demo is available on **Ethereum Sepolia** for hands-on evaluation.
-
-- Demo access is **request-based**
-- Participants can cast encrypted votes and verify the final tally on-chain
-- The demo is intentionally simplified to maximize accessibility
-
-A recorded end-to-end walkthrough is available at [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md).
-
-**Important:**
-The demo environment differs from the production configuration.
-These differences are documented explicitly in [`docs/demo.md`](docs/demo.md).
-
----
-
-## Security & trust assumptions
-
-In v1.5:
-- A coordinator orchestrates vote closure and tally execution  
-- Vote validity and tally correctness are enforced by **zero-knowledge proofs and on-chain verification**  
-- Tampering, omission, or result manipulation is detectable on-chain  
-
-The trust model and its scope are described concisely in
-[`docs/threat-model.md`](docs/threat-model.md).
+A request-based demo runs on Sepolia. It is an **honest-client flow demonstration**, not an adversarially secure election — and it is most useful as a **self-verification device**: vote from several wallets you control, then check that the on-chain tally equals the sum of your own weights. No gas needed from participants. Details and constraints: [`docs/demo.md`](docs/demo.md). Access: DM [@0xgumi](https://x.com/0xgumi).
 
 ---
 
 ## Roadmap
 
-Commitra is an actively maintained system.
-
-- v1.5: Product-ready ZK voting with verifiable tally  
-- v2: Removal of single-coordinator trust via threshold cryptography, scalability improvements, and cross-chain support  
-
-Planned and exploratory items are clearly separated in
-[`docs/roadmap.md`](docs/roadmap.md).
+Direction only — problem statements, not commitments or dates: [`docs/roadmap.md`](docs/roadmap.md). The order follows the audit findings: input integrity in the vote circuit, snapshot binding, tally-batch binding, threshold decryption, scale.
 
 ---
 
-## Why is the code not public?
+## Related work
 
-Commitra’s security relies heavily on cryptographic implementation details
-(circuits, parameters, key handling, and operational constraints).
+[MACI](https://github.com/privacy-ethereum/maci) and [Vocdoni's DAVINCI](https://github.com/vocdoni/davinci-node) address adjacent problems; DAVINCI in particular is prior art for aggregate-only decryption of encrypted ballots. Commitra shares the aggregate-only-decryption approach but no code or design lineage with either project; its dated development record (December 2025) is in [`docs/PROVENANCE.md`](docs/PROVENANCE.md). Its threat model differs from MACI's (data minimization vs. anti-collusion) and its value here is the worked minimal implementation together with its failure map, not a claim of novelty or superiority.
 
-To prevent misuse and premature hard-forking of sensitive components,
-this repository focuses on **verifiability rather than reproducibility**.
+---
 
-Common questions are addressed in [`docs/faq.md`](docs/faq.md).
+## License
+
+GPL-3.0 — see [`LICENSE`](LICENSE). The circuits depend on [circomlib](https://github.com/iden3/circomlib) (GPL-3.0); proofs are generated with [snarkjs](https://github.com/iden3/snarkjs).
 
 ---
 
 ## Contact
 
-For demo access, review discussions, or collaboration inquiries:
+- X (Twitter): [@0xgumi](https://x.com/0xgumi) — demo access, review discussion, collaboration
 
-- X (Twitter): [@0xgumi](https://x.com/0xgumi)
-
-Please include a short description of your interest or evaluation context.
+Solo project. Feedback on the proof-scope gaps and the planned circuit revisions is especially welcome.
