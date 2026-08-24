@@ -1,0 +1,12 @@
+node_modules/
+.env
+.env.*
+*.db
+public/dist/
+tally_outputs/
+recovery_logs/
+snapshots/
+coordinator_key.json
+tally_final.zkey
+.DS_Store
+*.log
