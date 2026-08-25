@@ -1,6 +1,6 @@
 # Roadmap
 
-Direction, not commitments. No dates. Items are ordered by the audit findings: the gaps that most undermine the system's claims get fixed first. Problem statements are given; detailed designs are intentionally not published here.
+Direction, not commitments. No dates. Items are ordered by the review findings: the gaps that most undermine the system's claims get fixed first. Problem statements are given; detailed designs are intentionally not published here.
 
 ---
 

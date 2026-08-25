@@ -1,10 +1,10 @@
 # Commitra
 
-Commitra is a **research implementation** of privacy-preserving, token-weighted voting for the EVM ecosystem, built on homomorphic aggregation: votes are ElGamal-encrypted in the browser, homomorphically summed, and **only the aggregate is ever decrypted**. Vote validity and tally computation are proven with Groth16 ZK proofs and verified on-chain (Ethereum Sepolia).
+Commitra is a **solo research implementation** of privacy-preserving, token-weighted voting for the EVM ecosystem, built on homomorphic aggregation: votes are ElGamal-encrypted in the browser, homomorphically summed, and **only the aggregate is ever decrypted** in the implemented tally path. Under the current single-key coordinator this is protocol behaviour, not a cryptographically enforced guarantee (see the threat model). Vote validity and tally computation are proven with Groth16 ZK proofs and verified on-chain (Ethereum Sepolia).
 
 This repository contains the **full source**: circuits, contracts, server, client, and operational scripts, together with the protocol specification and a precise map of what the proofs do and do not guarantee.
 
-**What this is:** a minimal construction (two circuits, one curve, browser-side proving) implemented end-to-end and exercised on a public testnet, published together with the boundary of what it actually proves — drawn with the help of three independent code audits.
+**What this is:** a minimal construction (two circuits, one curve, browser-side proving) implemented end-to-end and exercised on a public testnet, published together with the boundary of what it actually proves — drawn with the help of three independent code-review passes.
 
 **What this is not:** a production-ready system. It has known, documented gaps between "implemented" and "proven" (see below), a single-operator trust model, and a deliberately small scope (100 votes per tally batch). Earlier versions of this repository described the system as "product-ready"; that claim was wrong and is retracted.
 
@@ -55,9 +55,9 @@ Resolved in the 2026-08-25 server hardening pass: Cloudflare-aware rate limiting
 
 ---
 
-## Audits
+## Code review
 
-Three independent code audits (2026-07-05, 2026-07-23, 2026-08-23) reviewed the implementation. Their consensus findings — unauthenticated EOA admission, nullifier–leaf non-binding, unproven ciphertext validity, unbound tally batch — are what drew the proof-scope map above and drive the roadmap. The audits were of the code in this repository; audit write-ups are not published, but every consensus finding is reflected in [`docs/threat-model.md`](docs/threat-model.md) and the spec.
+Three independent code-review passes (2026-07-05, 2026-07-23, 2026-08-23) covered the implementation. Their consensus findings — unauthenticated EOA admission, nullifier–leaf non-binding, unproven ciphertext validity, unbound tally batch — are what drew the proof-scope map above and drive the roadmap. The reviews were of the code in this repository; the full write-ups are not published, but every consensus finding is reflected in [`docs/threat-model.md`](docs/threat-model.md) and the spec.
 
 ---
 
@@ -96,13 +96,13 @@ A request-based demo runs on Sepolia. It is an **honest-client flow demonstratio
 
 ## Roadmap
 
-Direction only — problem statements, not commitments or dates: [`docs/roadmap.md`](docs/roadmap.md). The order follows the audit findings: input integrity in the vote circuit, snapshot binding, tally-batch binding, threshold decryption, scale.
+Direction only — problem statements, not commitments or dates: [`docs/roadmap.md`](docs/roadmap.md). The order follows the review findings: input integrity in the vote circuit, snapshot binding, tally-batch binding, threshold decryption, scale.
 
 ---
 
 ## Related work
 
-[MACI](https://github.com/privacy-ethereum/maci) and [Vocdoni's DAVINCI](https://github.com/vocdoni/davinci-node) address adjacent problems; DAVINCI in particular is prior art for aggregate-only decryption of encrypted ballots. Commitra shares the aggregate-only-decryption approach but no code or design lineage with either project; its dated development record (December 2025) is in [`docs/PROVENANCE.md`](docs/PROVENANCE.md). Its threat model differs from MACI's (data minimization vs. anti-collusion) and its value here is the worked minimal implementation together with its failure map, not a claim of novelty or superiority.
+[MACI](https://github.com/privacy-ethereum/maci) and [Vocdoni's DAVINCI](https://github.com/vocdoni/davinci-node) address adjacent problems; DAVINCI in particular is the closest prior art for homomorphic ballot aggregation with aggregate-only decryption. Commitra's dated development record (from December 2025) is in [`docs/PROVENANCE.md`](docs/PROVENANCE.md). Its threat model differs from MACI's (data minimization vs. anti-collusion) and its value here is the worked minimal implementation together with its failure map, not a claim of novelty or superiority.
 
 ---
 
@@ -116,4 +116,4 @@ GPL-3.0 — see [`LICENSE`](LICENSE). The circuits depend on [circomlib](https:/
 
 - X (Twitter): [@0xgumi](https://x.com/0xgumi) — demo access, review discussion, collaboration
 
-Solo project. Feedback on the proof-scope gaps and the planned circuit revisions is especially welcome.
+Feedback on the proof-scope gaps and the planned circuit revisions is especially welcome.

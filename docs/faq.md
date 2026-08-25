@@ -38,7 +38,7 @@ With a modified client, currently yes, in two ways. First, the nullifier is not 
 
 ## How were these gaps found?
 
-Three independent code audits (July–August 2026) of this codebase converged on the same core findings. The published threat model and proof-scope map are the integration of those findings.
+Three independent code-review passes (July–August 2026) over this codebase converged on the same core findings. The published threat model and proof-scope map are the integration of those findings.
 
 ---
 
