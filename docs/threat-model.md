@@ -47,7 +47,7 @@ A voter running a modified client **cannot**:
 A voter running a modified client **can, currently**:
 
 - **Vote multiple times from the same leaf.** The nullifier is `Poseidon(secret_nullifier, voteId)` where `secret_nullifier` is an unconstrained private input — the circuit does not bind it to the leaf or the voter's key. A standard client derives it deterministically (so honest re-votes are rejected), but a modified client can pick a fresh `secret_nullifier` per submission and generate unlimited valid proofs from one leaf. **One-voter-one-vote is not cryptographically enforced**
-- Submit ciphertexts that are **not well-formed ElGamal encryptions** (invalid or small-subgroup curve points) — the circuit does not constrain point validity, and the server checks format only
+- Submit ciphertexts that are **not well-formed ElGamal encryptions** (invalid or small-subgroup curve points) — the circuit does not constrain point validity. The server now rejects off-curve, small-subgroup, non-canonical and identity-`C1` points before relaying, which closes this path *as long as the server is honest*; it is a mitigation, not a proof
 - Submit plaintexts **outside `{0, weight}`** — no range constraint; weight splitting, negative or overflow encodings are not excluded by the proof
 - Commit to a **weight that does not match any snapshot entry**, if they get past the server-side admission gate
 
@@ -99,7 +99,8 @@ Both proving keys were produced with a **single phase-2 contribution by the auth
 | One vote per voter | **Not enforced** (nullifier not circuit-bound to the leaf; holds for standard clients only) |
 | Tallied ciphertexts = proof-committed ciphertexts | Enforced (server + circuit hash binding) |
 | Tally = correct sum + decryption of a committed batch | Enforced (proof) |
-| Ciphertext well-formedness / plaintext range | **Not enforced** |
+| Ciphertext point validity | **Server-mitigated** (rejected before relay; not circuit-constrained) |
+| Plaintext in `{0, weight}`, one choice | **Not enforced** |
 | Committed weight = snapshot weight | **Not enforced** (server-gated only) |
 | Tallied batch = canonical submitted set | **Not enforced** |
 | Aggregate-only decryption by coordinator | **Not enforced** (norm) |

@@ -18,7 +18,7 @@ For any recorded vote transaction (examples: [`../samples/demo/walkthrough.md`](
 
 This establishes: *someone holding secrets for a registered leaf produced a valid proof over exactly these ciphertext hashes, with a nullifier not seen before in this voteId.*
 
-It does **not** establish that the ciphertexts are well-formed encryptions of an in-range vote — the circuit does not constrain that. Nor does it establish one-vote-per-voter: the nullifier is not circuit-bound to the leaf, so the same leaf holder could have submitted other votes under other nullifiers (see [`threat-model.md`](threat-model.md)).
+It does **not** establish that the ciphertexts are well-formed encryptions of an in-range vote — the circuit does not constrain that (the server rejects invalid curve points before relaying, but a valid point encoding an out-of-range plaintext passes). Nor does it establish one-vote-per-voter: the nullifier is not circuit-bound to the leaf, so the same leaf holder could have submitted other votes under other nullifiers (see [`threat-model.md`](threat-model.md)).
 
 ### Tally finalization (`TallyContract.finalizeTally`)
 
@@ -59,7 +59,7 @@ The most direct verification available to an outside party is the demo used as a
 | No vote choice or voter address is on-chain | Yes — inspect the transactions |
 | Result = correct sum + decryption of a committed batch | Yes — on-chain proof |
 | The committed batch = the actual submitted votes | **No** — not enforced or checkable on-chain; out-of-band only |
-| Ballots are well-formed encryptions of in-range votes | **No** — not constrained by the circuit |
+| Ballots are well-formed encryptions of in-range votes | **No** — not constrained by the circuit (point validity is server-checked only) |
 | The operator decrypted only the aggregate | **No** — unprovable under single-key ElGamal |
 | The deployed verifiers match these circuits | Yes — by rebuilding ([`BUILD.md`](BUILD.md)) |
 

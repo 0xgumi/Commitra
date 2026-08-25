@@ -108,26 +108,30 @@ async function main() {
 
   // 4. Calculate dummy count
   const TARGET_COUNT = 100;
+  if (realVoteCount > TARGET_COUNT) {
+    console.error(`✗ ${realVoteCount} permits exceed the tally batch size (${TARGET_COUNT}); cannot finalize`);
+    process.exit(1);
+  }
   const dummyCount = TARGET_COUNT - realVoteCount;
+  console.log("✓ Dummies needed:", dummyCount);
 
-  if (dummyCount <= 0) {
-    console.log("✓ No dummies needed (vote count >= 100)");
+  // 5. Check if dummies already registered
+  const alreadyRegistered = await votingContract.isDummyRegistered(voteId);
+  if (alreadyRegistered) {
+    console.log("⚠ Dummies already registered");
   } else {
-    console.log("✓ Dummies needed:", dummyCount);
+    // 6. Call registerDummyVotes — also with an empty batch when exactly 100 real
+    // votes need no padding, because finalizeTally requires isDummyRegistered
+    console.log("\n3. Calling registerDummyVotes...");
+    const dummyHashes = new Array(dummyCount).fill(DUMMY_HASH);
+    const dummyTx = await ownerVotingContract.registerDummyVotes(voteId, dummyHashes);
+    await dummyTx.wait();
+    console.log(`✓ registerDummyVotes complete (${dummyCount} dummies), tx:`, dummyTx.hash);
+  }
 
-    // 5. Check if dummies already registered
-    const alreadyRegistered = await votingContract.isDummyRegistered(voteId);
-    if (alreadyRegistered) {
-      console.log("⚠ Dummies already registered");
-    } else {
-      // 6. Call registerDummyVotes
-      console.log("\n3. Calling registerDummyVotes...");
-      const dummyHashes = new Array(dummyCount).fill(DUMMY_HASH);
-      const dummyTx = await ownerVotingContract.registerDummyVotes(voteId, dummyHashes);
-      await dummyTx.wait();
-      console.log("✓ registerDummyVotes complete, tx:", dummyTx.hash);
-    }
-
+  if (dummyCount === 0) {
+    console.log("✓ No dummy permits needed (exactly 100 real votes)");
+  } else {
     // 7. Insert dummy permits to DB
     console.log("\n4. Saving dummy permits to DB...");
     

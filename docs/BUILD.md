@@ -15,6 +15,7 @@ How to build the client, run the server, recompile the circuits, and check the p
 
 ```bash
 npm install
+npm test          # regression tests (ciphertext point validation)
 ```
 
 ---

@@ -377,6 +377,7 @@ const crypto = require("crypto");
 const fs = require("fs");
 const path = require("path");
 const { votingContract, getNextVotingContract } = require("../config/onchain");
+const { validateEncryptedVotes } = require("../lib/ciphertextValidation");
 
 let poseidon, F;
 
@@ -843,7 +844,7 @@ router.post("/leaf", async (req, res) => {
       ts: new Date().toISOString(),
       result: "error"
     });
-    return res.status(500).json({ error: err.message || "server error" });
+    return res.status(500).json({ error: "server error" });
   } finally {
     // #2 Fix: lock 해제 (획득한 경우에만)
     if (release) release();
@@ -1019,6 +1020,10 @@ router.post("/submit-vote", async (req, res) => {
     if (!isValidEncryptedVotes(encryptedVotes)) {
       return res.status(400).json({ error: "Invalid encryptedVotes format" });
     }
+    const pointCheck = await validateEncryptedVotes(encryptedVotes);
+    if (!pointCheck.ok) {
+      return res.status(400).json({ error: `Invalid encryptedVotes: ${pointCheck.error}` });
+    }
 
     const merkleRoot = "0x" + BigInt(publicSignals[0]).toString(16).padStart(64, "0");
     const voteId = publicSignals[4];
@@ -1107,7 +1112,7 @@ router.post("/submit-vote", async (req, res) => {
 
   } catch (err) {
     console.error("submit-vote error:", err);
-    return res.status(500).json({ error: err.message || "server error" });
+    return res.status(500).json({ error: "server error" });
   }
 });
 

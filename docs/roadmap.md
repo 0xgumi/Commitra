@@ -8,8 +8,8 @@ Direction, not commitments. No dates. Items are ordered by the audit findings: t
 
 Close the known implementation issues listed in [`REVISION19.md`](REVISION19.md) §17.5, and add server-side enforcement that doesn't require new circuits:
 
-- Proxy-aware rate limiting and auth-failure throttling
-- Ciphertext point validation (on-curve, prime-order subgroup, non-identity) at submission time — a server-side mitigation for the circuit gap, explicitly recorded as *mitigated, not resolved*
+- ~~Proxy-aware rate limiting and auth-failure throttling~~ — done (2026-08-25)
+- ~~Ciphertext point validation at submission time~~ — done (2026-08-25), recorded as *mitigated, not resolved*: the circuit gap remains
 - Durable dedupe of pubkey commitments per vote
 - Fail-fast bounds on batch size and snapshot weights (BSGS-recoverable range)
 - Authenticated, once-per-EOA leaf admission for the closed-snapshot configuration

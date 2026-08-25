@@ -3,14 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --test test/",
     "build": "vite build",
     "build:demo": "vite build --config vite.config.demo.mjs",
     "build:all": "vite build && vite build --config vite.config.demo.mjs"
   },
   "keywords": [],
   "author": "",
-  "license": "ISC",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "better-sqlite3": "^11.10.0",
     "body-parser": "^2.2.1",
@@ -20,8 +20,8 @@
     "dotenv": "^17.2.3",
     "ethers": "^6.16.0",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.2.1",
-    "snarkjs": "^0.6.11"
+    "express-rate-limit": "^8.6.2",
+    "snarkjs": "0.6.11"
   },
   "description": "",
   "devDependencies": {

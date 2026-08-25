@@ -22,7 +22,7 @@ The honest version, condensed (full statement: [`docs/REVISION19.md`](docs/REVIS
 
 | Proven | Not proven (current gaps) |
 |--------|---------------------------|
-| Merkle membership under an accepted root | Ciphertexts are well-formed ElGamal encryptions (valid curve points) |
+| Merkle membership under an accepted root | Ciphertexts are well-formed ElGamal encryptions (valid curve points) — the server now rejects invalid points, but the circuit does not constrain them |
 | Each nullifier is spendable once per vote (on-chain) | Plaintexts are in `{0, weight}`, one choice only |
 | Ciphertexts stored for tally are exactly those the proof committed to (server-checked) | **One vote per voter** — the nullifier is not circuit-bound to the leaf or key; a modified client can derive fresh nullifiers from the same leaf and re-vote |
 | Tally = correct sum + decryption of a committed batch | Committed weight equals the snapshot weight (server-gated, not circuit-bound) |
@@ -43,18 +43,15 @@ Consequences, stated plainly: a malicious **voter** with a modified client could
 
 ---
 
-## Known issues (deferred, tracked)
+## Known issues (tracked)
 
-The following implementation issues are known and deliberately deferred; none affects the honesty of the claims above, and no live vote is running on the Product deployment:
+Implementation issues that remain open; none affects the honesty of the claims above, and no live vote is running on the Product deployment:
 
-- Rate limiting is not Cloudflare-aware (keys on the tunnel-local address, not `CF-Connecting-IP`); auth failures are not separately throttled
-- Error responses may echo internal error strings
-- The browser prover loads snarkjs from a CDN (no pinned local copy)
-- A finalize edge case at exactly 100 real votes blocks tally finalization
-- Server-side ciphertext point validation (on-curve/subgroup) is absent — the deeper circuit-level issue is in the table above
-- `package.json` still declares `"license": "ISC"`; the repository license is GPL-3.0 (`LICENSE`) — the field is stale and pending correction
+- The leaf admission token's single-use set is in-memory (a restart clears it until tokens expire; the registration cap still bounds leaves)
+- `leafLocks` has no TTL; no graceful shutdown handlers; error response format not standardized
+- Snapshot weights are not validated against the BSGS-recoverable range at snapshot creation
 
-Full list: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
+Resolved in the 2026-08-25 server hardening pass: Cloudflare-aware rate limiting, auth-failure throttling, generic error responses, locally pinned snarkjs, the exactly-100-votes finalize case, server-side ciphertext point validation (a mitigation — the circuit gap in the table above remains), and the `package.json` license field. Full list and details: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
 
 ---
 
@@ -73,6 +70,7 @@ Three independent code audits (2026-07-05, 2026-07-23, 2026-08-23) reviewed the 
 | `src/` | Express server, SQLite modules, tally pipeline, browser client source |
 | `scripts/` | Snapshot creation, finalize, on-chain setup |
 | `public/` | Client artifacts incl. `vote.wasm`, `vote_final.zkey` (browser proving) |
+| `test/` | Regression tests (`npm test`) — ciphertext point validation |
 | `usage/` | Step-by-step operational guides |
 | `docs/` | [`REVISION19.md`](docs/REVISION19.md) (spec) · [`threat-model.md`](docs/threat-model.md) · [`verification.md`](docs/verification.md) · [`PROVENANCE.md`](docs/PROVENANCE.md) · [`BUILD.md`](docs/BUILD.md) |
 | `samples/` | Recorded end-to-end runs on Sepolia (transactions, screenshots) |

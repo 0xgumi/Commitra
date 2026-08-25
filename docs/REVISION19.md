@@ -215,7 +215,7 @@ For what this list does **not** cover (ciphertext well-formedness, plaintext ran
 
 ### Server Pre-validation (gas saving + DB integrity)
 
-1. `encryptedVotes` format validated (3×2×2 array of BigInt strings — **format only**; on-curve / subgroup membership is not checked, see §17.3)
+1. `encryptedVotes` validated: shape (3×2×2 decimal strings), then each of the 6 points checked for canonical field range, on-curve, prime-order subgroup membership, and non-identity `C1` (`src/lib/ciphertextValidation.js`). This is a **server-side mitigation** — the circuit itself still does not constrain point validity, see §17.3
 2. merkleRoot validity checked against on-chain `validRoots` (per voteId)
 3. Nullifier checked against `used_nullifiers` table (per voteId)
 4. **Proof-hash binding (v2)**: the server recomputes `Poseidon(12 ciphertext coordinates)` from the submitted `encryptedVotes` and rejects the submission unless it equals `publicSignals[3]`. This guarantees the ciphertexts the server stores for tallying are exactly the ones the ZK proof committed to — a client cannot pass a proof over one set of ciphertexts while handing the server another
@@ -262,7 +262,7 @@ For what this list does **not** cover (ciphertext well-formedness, plaintext ran
 
 **The tally circuit is compiled for n=100, so exactly 100 permits are always required.**
 
-Known issue: when the real vote count is exactly 100, the dummy-registration step is skipped entirely, leaving the on-chain `dummyRegistered` flag unset — which blocks `finalizeTally`. An explicit empty-batch `registerDummyVotes` call is required in that case. Deferred; see Known Issues in `README.md`.
+`registerDummyVotes` is called even when exactly 100 real votes need no padding (with an empty batch), because `finalizeTally` requires the on-chain `dummyRegistered` flag. More than 100 permits is a fail-fast error — the tally circuit cannot process it.
 
 ### Step 4 — Lock Cleanup
 
@@ -432,7 +432,7 @@ All endpoints below are under the `/voter` prefix, except `/health` which is reg
 | POST | /proof | `{ voteId, leaf }` → Merkle proof query | — |
 | POST | /verify-root | `{ voteId, root }` → root validity check | — |
 | GET | /coordinator-key | Return coordinator pubkey | — |
-| POST | /submit-vote | Proof submission → on-chain vote | encryptedVotes format (3×2×2 BigInt); nullifier dedupe; on-chain root check; `publicSignals[3]` hash binding |
+| POST | /submit-vote | Proof submission → on-chain vote | encryptedVotes shape + curve-point validation; nullifier dedupe; on-chain root check; `publicSignals[3]` hash binding |
 | POST | /cleanup-locks | Release leafLock for voteId | `INTERNAL_API_TOKEN` required |
 
 **App-level endpoint** (not under `/voter`):
@@ -573,15 +573,22 @@ uint256 public coordinatorPubkeyY;
 | Access control | `INTERNAL_API_TOKEN` for `/cleanup-locks` | `voter.js`, `voter_demo.js` |
 | Input validation | Leaf format (`0x` + 64 hex) | `voter.js`, `voter_demo.js` |
 | Input validation | EOA format (`0x` + 40 hex) | `voter.js`, `voter_demo.js` |
-| Input validation | encryptedVotes structure (3×2×2 BigInt) | `voter.js`, `voter_demo.js` |
-| Rate limiting | Global: 100 req/min | `server.js`, `server_demo.js` |
+| Input validation | encryptedVotes structure (3×2×2 decimal strings) | `voter.js`, `voter_demo.js` |
+| Input validation | Ciphertext point validation: canonical range, on-curve, prime-order subgroup, non-identity `C1` (mitigation; regression tests in `test/`) | `src/lib/ciphertextValidation.js` |
+| Rate limiting | Keyed by real client IP: `trust proxy = loopback`, `CF-Connecting-IP` honored only when the TCP peer is the local tunnel | `src/lib/clientIp.js`, `server.js`, `server_demo.js` |
+| Rate limiting | Global: 100 req/min, applied before authentication | `server.js`, `server_demo.js` |
+| Rate limiting | Authentication failures: 10 per 15 min per client (counts 401 responses only) | `server.js`, `server_demo.js` |
 | Rate limiting | `/leaf`: 20 req/min | `server.js`, `server_demo.js` |
 | Rate limiting | `/submit-vote`: 20 req/min | `server.js`, `server_demo.js` |
 | Body size | 1MB limit (`express.json`) | `server.js`, `server_demo.js` |
+| Error hygiene | 500 responses carry a generic message; details go to server logs only | `voter.js`, `voter_demo.js` |
+| Supply chain | Browser prover loads the pinned local snarkjs build (`/vendor/snarkjs.min.js` from `node_modules`, exact version in `package.json`) instead of a CDN | `server.js`, `server_demo.js`, `public/index*.html` |
 | Key protection | Coordinator privkey excluded from tally_input.json | `tally.js`, `tally_demo.js` |
 | Key protection | `coordinator_key.json` gitignored | `.gitignore` |
 | Duplicate prevention | Nullifier check (DB + on-chain, per voteId) | `voter.js`, `/submit-vote` |
 | DB integrity | `encryptedVotesHash` recalculation during tally | `tally.js`, `tally_demo.js` |
+
+Rate-limiter notes: the `RateLimit-*` response headers reflect the last limiter applied to the request (the authentication-failure limiter when Basic Auth is enabled), not the global one. Limiters count a request on arrival and only subtract it afterwards if it succeeded, so a client that has exhausted its failure allowance is rejected for the rest of the window even with correct credentials.
 
 ### 17.2 Cryptographic Notes
 
@@ -608,7 +615,7 @@ This section replaces the former "Known Limitations" list. It is the precise sta
 | Property | Current status |
 |----------|----------------|
 | One vote per voter | Not constrained. `secret_nullifier` is an unconstrained private input — the circuit does not bind it to the leaf or the voter's key. A standard client derives it deterministically (honest re-votes are rejected), but a modified client can pick a fresh `secret_nullifier` per submission and vote repeatedly from the same leaf |
-| Ciphertexts are well-formed ElGamal encryptions (valid curve points, prime-order subgroup, non-identity C1) | Not checked in circuit; server checks BigInt format only |
+| Ciphertexts are well-formed ElGamal encryptions (valid curve points, prime-order subgroup, non-identity C1) | Not constrained in circuit. The server rejects off-curve, small-subgroup, non-canonical and identity-`C1` points before relaying (§7) — a mitigation that depends on the server being honest, not a proof |
 | Each plaintext is in `{0, weight}` | Not constrained |
 | Exactly one choice carries the full weight (no weight splitting, no negative/overflow encodings) | Not constrained |
 | The committed `weight` equals the snapshot weight for an eligible EOA | Not circuit-bound. The leaf admission token gates *who can register a leaf* (server-enforced), but nothing cryptographically ties `weightCommit` to the snapshot entry |
@@ -630,7 +637,7 @@ This section replaces the former "Known Limitations" list. It is the precise sta
 | The result is bound to a specific voteId inside the proof | voteId absent from tally public signals (contract storage provides per-voteId separation only) |
 | The coordinator decrypted only the aggregate | Unprovable under single-key ElGamal; trust assumption (§17.4) |
 
-Consequences, stated plainly: a **malicious voter** with a modified client could vote multiple times from one leaf (fresh nullifiers), or submit ciphertexts that pass the vote proof yet corrupt the aggregate (invalid points or out-of-range plaintexts); a **malicious coordinator** could tally a different batch than the submitted set, and could decrypt individual ciphertexts. The system as implemented demonstrates the honest-participant flow end-to-end and makes coordinator *computation* verifiable within the scope above — it does not yet remove these trust assumptions. Circuit-level fixes (ciphertext well-formedness, snapshot binding, batch binding, threshold decryption) are the planned v5/v6 upgrades and each requires a new trusted setup ceremony.
+Consequences, stated plainly: a **malicious voter** with a modified client could vote multiple times from one leaf (fresh nullifiers), or submit ciphertexts that pass the vote proof yet corrupt the aggregate (out-of-range plaintexts; invalid points are now rejected by the server, which only helps while the server is honest); a **malicious coordinator** could tally a different batch than the submitted set, and could decrypt individual ciphertexts. The system as implemented demonstrates the honest-participant flow end-to-end and makes coordinator *computation* verifiable within the scope above — it does not yet remove these trust assumptions. Circuit-level fixes (ciphertext well-formedness, snapshot binding, batch binding, threshold decryption) are the planned v5/v6 upgrades and each requires a new trusted setup ceremony.
 
 ### 17.4 Trust Assumptions
 
@@ -640,18 +647,14 @@ Consequences, stated plainly: a **malicious voter** with a modified client could
 4. **Trusted setup** — both zkeys were produced with a **single phase-2 contribution** by the author (verifiable from the zkey files; see `PROVENANCE.md`). Soundness rests on that contribution's toxic waste being discarded
 5. **Not receipt-free** — a voter can prove their vote by revealing ElGamal randomness (intentional scope decision)
 
-### 17.5 Known Implementation Issues (deferred, tracked)
+### 17.5 Known Implementation Issues (tracked)
 
-Deliberately deferred pending the current publication cycle; none affects the honesty of the claims above, and the Product deployment carries no live votes. Listed for completeness:
+None affects the honesty of the claims above, and the Product deployment carries no live votes. Listed for completeness:
 
-- Rate limiting is not Cloudflare-aware (limiter keys on the tunnel-local peer address, not `CF-Connecting-IP`); Basic Auth failures are not separately throttled
-- Error responses may echo internal `err.message` strings
-- The browser prover loads snarkjs from a CDN (no pinned local copy)
-- Exactly-100-votes finalize skips dummy registration and blocks `finalizeTally` (§8)
-- Ciphertext point validation (on-curve / subgroup / identity checks) absent server-side — the deeper circuit-level issue is in §17.3
 - Leaf token single-use set is in-memory (a server restart clears used-`jti` records until token expiry; the registration cap still bounds total leaves)
 - `leafLocks` has no TTL — locks accumulate if finalize is not called
 - No graceful shutdown handlers (SIGTERM/SIGINT); DB connections not explicitly closed on shutdown
 - Error response format is not fully standardized
 - Snapshot weights are not validated as positive integers within the BSGS-recoverable range (§9 Step 6) at snapshot creation time
-- `package.json` still declares `"license": "ISC"` while the repository license is GPL-3.0 — stale field, pending correction
+
+**Resolved in the 2026-08-25 server hardening pass** (previously listed here as deferred): Cloudflare-aware rate limiting keyed by the real client IP; throttling of authentication failures; generic 500 responses instead of echoing internal error strings; snarkjs served from the pinned local build instead of a CDN; the exactly-100-votes finalize case (§8); server-side ciphertext point validation (§7, §17.3 — mitigation only); `package.json` license field corrected to GPL-3.0-only. Verified with a full demo lifecycle on Sepolia after the changes.

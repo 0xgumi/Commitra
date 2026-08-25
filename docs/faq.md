@@ -32,7 +32,7 @@ It cannot publish a result that isn't the correct sum-and-decryption of *some* c
 
 With the standard client, no: re-votes are rejected (the nullifier is derived deterministically, and each nullifier is spendable once on-chain).
 
-With a modified client, currently yes, in two ways. First, the nullifier is not circuit-bound to the voter's leaf or key, so a modified client can derive fresh nullifiers from the same leaf and vote multiple times — one-voter-one-vote is not cryptographically enforced. Second, a modified client can submit malformed ciphertexts or out-of-range plaintexts that a valid-looking proof does not exclude — the vote circuit does not yet constrain ciphertext well-formedness or the `{0, weight}` range. These are the most important known gaps; fixing them is the next circuit revision.
+With a modified client, currently yes, in two ways. First, the nullifier is not circuit-bound to the voter's leaf or key, so a modified client can derive fresh nullifiers from the same leaf and vote multiple times — one-voter-one-vote is not cryptographically enforced. Second, a modified client can submit out-of-range plaintexts that a valid-looking proof does not exclude — the vote circuit does not yet constrain the `{0, weight}` range (malformed curve points are now rejected server-side, but that only holds while the server is honest; the circuit does not constrain them either). These are the most important known gaps; fixing them is the next circuit revision.
 
 ---
 
