@@ -44,7 +44,9 @@ Each address page on a block explorer shows the **contract-creation transaction 
 
 ### Source history
 
-The circuit sources were committed to the author's private development repository on **2025-12-31**; the GitHub push record for that commit is preserved and can be shown to reviewers on request. The circuit files published here are byte-identical to that commit. The public history of this repository (documentation-only since December 2025, full source from this release) reflects the publication path, not the development timeline.
+The circuit sources were first committed on **2025-12-31** in the author's private development repository. The implementation history in this repository was extracted from that repository as a path subset, and the author identity across this repository's entire history was normalized before publication. **Because this history was rewritten, its commit dates and GitHub timestamps are not independent evidence** of when the work was done.
+
+Independent date evidence consists of (1) the Sepolia contract-creation transactions listed above, and (2) the private development repository's GitHub push record from 2025-12-31, which can be shown to reviewers on request. The circuit files published here are byte-identical to that first commit. The public history of this repository (documentation-only since December 2025, full source from this release) reflects the publication path, not the development timeline.
 
 ---
 
