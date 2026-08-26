@@ -163,7 +163,8 @@ window.generateVoterRecord = async function () {
     const msg = "zkVote | voteId=" + voteId;
     const sig = await signer.signMessage(msg);
     out("Signature obtained");
-    out("⏳ Building voter credentials, please wait...");
+    out("⏳ Building your voter credentials and registering them on-chain. This usually completes within a minute while the transaction confirms.");
+    out("Nothing to do on your side. The next step will appear here automatically.");
 
     //--------------------------------------------------
     // 3. seedMaster
@@ -311,7 +312,7 @@ window.generateVoterRecord = async function () {
 window.selectVoteChoice = async function (voteChoice) {
   try {
     if (!voterData) return out("Please generate voter record first.");
-    if (!isOnchainConfirmed) return out("Please wait for on-chain confirmation.");
+    if (!isOnchainConfirmed) return out("Registration is still confirming on-chain. Please wait, the vote buttons will appear automatically.");
 
     out("Selected vote: " + ["YES", "NO", "ABSTAIN"][voteChoice]);
 
@@ -473,6 +474,7 @@ window.submitVote = async function () {
     document.getElementById("submitButton").style.opacity = "0.5";
 
     out("⏳ Generating ZK Proof... (takes about 30 seconds)");
+    out("The browser may feel slow during this step; that is expected.");
 
     const wasmPath = "/vote.wasm";
     const zkeyPath = "/vote_final.zkey";
@@ -499,7 +501,8 @@ window.submitVote = async function () {
     console.log("publicSignals:", publicSignals);
 
     out("✓ Proof ready");
-    out("⏳ Submitting vote to blockchain...");
+    out("⏳ Submitting your vote to the blockchain and waiting for confirmation. This usually completes within a minute.");
+    out("Nothing to do on your side. The result will appear here automatically.");
 
     // Submit to server
     const submitResp = await fetch("/voter/submit-vote", {
