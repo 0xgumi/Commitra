@@ -134,3 +134,16 @@ tail -n 20 recovery_logs/leaf_audit_product.jsonl
 tail -n 20 recovery_logs/submit_vote_recovery_demo.jsonl
 tail -n 20 recovery_logs/leaf_audit_demo.jsonl
 ```
+
+---
+
+## 6. Recovery: closed on-chain but `closedAt` is NULL in the DB
+
+Happens when a finalize run stops right after the `closeVoting` transaction confirmed and before the DB was updated. Re-running finalize refuses this mismatch, so — **after confirming this DB really owns the vote** — record the closure manually and re-run:
+
+```bash
+sqlite3 src/db/voting.db "UPDATE active_votes SET closedAt = datetime('now') WHERE voteId = 1;"   # Product
+sqlite3 src/db/voting_demo.db "UPDATE active_votes SET closedAt = datetime('now') WHERE voteId = 1;"   # Demo
+```
+
+Check the on-chain state with `node scripts/listVoteIds.js <product|demo> check <voteId>` or a full scan.

@@ -2,7 +2,7 @@
 require('dotenv').config({ path: '.env.demo', quiet: true });
 const path = require("path");
 const Database = require("better-sqlite3");
-const { ownerVotingContract } = require("../src/config/onchain");
+const { ownerVotingContract, ownerTallyContract } = require("../src/config/onchain");
 
 const dbPath = path.join(__dirname, "../src/db/voting_demo.db");
 const db = new Database(dbPath);
@@ -33,10 +33,11 @@ const syncDemoVoteTx = db.transaction((voteId, title) => {
 });
 
 async function main() {
-  const args = process.argv.slice(2);
+  const adopt = process.argv.includes("--adopt");
+  const args = process.argv.slice(2).filter(a => !a.startsWith("--"));
   if (args.length < 2) {
-    console.log("Usage: node scripts/createSnapshot.js <voteId> <title>");
-    console.log("Example: node scripts/createSnapshot.js 1 \"Demo Vote #1\"");
+    console.log("Usage: node scripts/createSnapshot_demo.js <voteId> <title> [--adopt]");
+    console.log("Example: node scripts/createSnapshot_demo.js 1 \"Demo Vote #1\"");
     process.exit(1);
   }
 
@@ -47,9 +48,36 @@ async function main() {
   console.log(`voteId: ${voteId}`);
   console.log(`title: ${title}`);
 
-  // 1. On-chain createVoteId 먼저 처리 (#2)
-  console.log(`\n1. Calling createVoteId(${voteId}) on-chain...`);
+  // 1. voteId 상태 확인 (DB → 체인), 통과한 뒤에만 createVoteId 전송
+  //    온체인 voteId 상태는 영구적이라, 이 DB가 모르는 기존 id를 조용히 입양하면 안 됨
+  console.log(`\n1. Checking voteId ${voteId} state...`);
+  const dbVote = db.prepare(
+    "SELECT voteId, closedAt FROM active_votes WHERE voteId = ?"
+  ).get(voteId);
+  if (dbVote && dbVote.closedAt) {
+    console.error(`✗ voteId ${voteId} already exists in this DB and is closed`);
+    process.exit(1);
+  }
+
   const isValid = await ownerVotingContract.isValidVoteId(voteId);
+  if (isValid && !dbVote) {
+    if (!adopt) {
+      console.error(`✗ voteId ${voteId} already exists on-chain but is unknown to this DB.`);
+      console.error(`  On-chain voteId state is permanent. Pick an unused id`);
+      console.error(`  (node scripts/listVoteIds.js demo check ${voteId}), or re-run with --adopt to attach an OPEN id.`);
+      process.exit(1);
+    }
+    // Sequential view calls: the free RPC tier rate-limits per request
+    const closed = await ownerVotingContract.isVotingClosed(voteId);
+    const dummy = await ownerVotingContract.isDummyRegistered(voteId);
+    const finalized = await ownerTallyContract.isTallyFinalized(voteId);
+    if (closed || dummy || finalized) {
+      console.error(`✗ voteId ${voteId} cannot be adopted: closed=${closed} dummyRegistered=${dummy} finalized=${finalized}`);
+      process.exit(1);
+    }
+    console.log(`⚠ Adopting existing OPEN on-chain voteId ${voteId}; roots registered before this DB remain valid on-chain`);
+  }
+
   if (isValid) {
     console.log(`✓ voteId ${voteId} already exists on-chain`);
   } else {

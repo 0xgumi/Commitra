@@ -57,6 +57,15 @@ No voter list — just voteId and title (voters auto-register):
 node scripts/createSnapshot_demo.js 1 "Demo Vote #1"
 ```
 
+**voteId rule**: on-chain voteId state is permanent (the contracts have no reset). Create a new vote only with an id for which `isValidVoteId` is false:
+
+```bash
+node scripts/listVoteIds.js demo check 12   # free / ALREADY USED
+node scripts/listVoteIds.js demo            # full scan: state + VoteSubmitted count per id; cached in cache/voteids_demo.json, re-runs fetch new blocks only
+```
+
+`createSnapshot_demo.js` refuses an existing on-chain id that this DB does not know (`--adopt` attaches OPEN ids only; closed/dummy/finalized ids are refused). finalize/tally/submitTally refuse already-finalized ids.
+
 ## 3. Register coordinators on-chain (with the server stopped)
 
 ```bash

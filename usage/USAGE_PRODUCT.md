@@ -49,6 +49,15 @@ The snapshot JSON defines the voter list and weights (format: `docs/REVISION19.m
 node scripts/createSnapshot.js snapshots/vote1.json
 ```
 
+**voteId rule**: on-chain voteId state is permanent (the contracts have no reset). Create a new vote only with an id for which `isValidVoteId` is false:
+
+```bash
+node scripts/listVoteIds.js product check 12   # free / ALREADY USED
+node scripts/listVoteIds.js product            # full scan: state + VoteSubmitted count per id; cached in cache/voteids_product.json, re-runs fetch new blocks only
+```
+
+`createSnapshot.js` refuses an existing on-chain id that this DB does not know (`--adopt` attaches OPEN ids only; closed/dummy/finalized ids are refused). finalize/tally/submitTally refuse already-finalized ids.
+
 ## 3. Register coordinators on-chain (with the server stopped)
 
 ```bash

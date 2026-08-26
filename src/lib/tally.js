@@ -12,6 +12,8 @@ const db = new Database(dbPath);
 
 // Coordinator key from environment
 require('dotenv').config({ path: '.env.tally', quiet: true });
+// onchain.js loads .env itself; requiring it after the tally env keeps these values
+const { ownerTallyContract } = require("../config/onchain");
 
 const coordinatorPubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);
 const coordinatorPrivkey = process.env.COORDINATOR_PRIVKEY;
@@ -25,6 +27,11 @@ async function runTally(voteId = 1) {
   const babyJub = await buildBabyjub();
   const poseidon = await buildPoseidon();
   const F = babyJub.F;
+
+  if (await ownerTallyContract.isTallyFinalized(voteId)) {
+    console.error(`❌ voteId ${voteId} is already finalized on-chain; nothing to tally`);
+    process.exit(1);
+  }
 
   //----------------------------------
   // 2. DB에서 permits 로드 (id 순서)

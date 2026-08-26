@@ -24,6 +24,11 @@ async function submitTally(voteId) {
   console.log("1. Proof 로드 완료");
   console.log("publicSignals 개수:", publicSignals.length);
 
+  if (await tallyContract.isTallyFinalized(voteId)) {
+    console.error(`❌ voteId ${voteId} is already finalized on-chain; not submitting`);
+    process.exit(1);
+  }
+
   // on-chain 제출
   console.log("2. finalizeTally() 호출 중...");
   

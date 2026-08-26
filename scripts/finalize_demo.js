@@ -4,7 +4,7 @@ require('dotenv').config({ path: '.env.demo', quiet: true });
 
 const path = require("path");
 const { buildBabyjub, buildPoseidon } = require("circomlibjs");
-const { ownerVotingContract, votingContract } = require("../src/config/onchain");
+const { ownerVotingContract, ownerTallyContract, votingContract } = require("../src/config/onchain");
 const Database = require("better-sqlite3");
 
 const dbPath = path.join(__dirname, "../src/db/voting_demo.db");
@@ -79,13 +79,33 @@ async function main() {
 
   console.log(`\n=== Finalize Demo VoteId: ${voteId} ===\n`);
 
-  // 0. Calculate dummy constants
+  // 0. Guard: only voteIds this DB knows, and never an already-finalized one
+  const voteRow = db.prepare(
+    "SELECT voteId, closedAt FROM active_votes WHERE voteId = ?"
+  ).get(voteId);
+  if (!voteRow) {
+    console.error(`✗ voteId ${voteId} is not in this DB (active_votes); refusing to finalize an on-chain-only id`);
+    process.exit(1);
+  }
+  if (await ownerTallyContract.isTallyFinalized(voteId)) {
+    console.error(`✗ voteId ${voteId} is already finalized on-chain (TallyContract)`);
+    process.exit(1);
+  }
+
+  // 0.5. Calculate dummy constants
   await calculateDummyConstants();
 
   // 1. Check if already closed
   const alreadyClosed = await votingContract.isVotingClosed(voteId);
   if (alreadyClosed) {
-    console.log("⚠ Voting already closed");
+    if (!voteRow.closedAt) {
+      console.error(`✗ voteId ${voteId} is closed on-chain but still open in this DB.`);
+      console.error(`  This happens when a previous run stopped after closeVoting confirmed but before the DB was updated.`);
+      console.error(`  If this DB really owns the vote, record the closure and re-run:`);
+      console.error(`    sqlite3 src/db/voting_demo.db "UPDATE active_votes SET closedAt = datetime('now') WHERE voteId = ${voteId};"`);
+      process.exit(1);
+    }
+    console.log("⚠ Voting already closed (DB and chain agree)");
   } else {
     // 2. Call closeVoting
     console.log("\n1. Calling closeVoting...");
@@ -121,6 +141,9 @@ async function main() {
   const alreadyRegistered = await votingContract.isDummyRegistered(voteId);
   if (alreadyRegistered) {
     console.log("⚠ Dummies already registered");
+    if (realVoteCount === 0) {
+      console.warn(`⚠ dummies are registered on-chain but this DB holds 0 permits for voteId ${voteId} — DB may be out of sync with the chain`);
+    }
   } else {
     // 6. Call registerDummyVotes — also with an empty batch when exactly 100 real
     // votes need no padding, because finalizeTally requires isDummyRegistered

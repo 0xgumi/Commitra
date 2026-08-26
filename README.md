@@ -54,7 +54,7 @@ Operational subset, not an exhaustive roadmap. At the 2026-08-26 publication-pre
 - Product can accept more than 100 real permits; `finalize` detects this only after closing and cannot produce a tally for that voteId
 - Fresh clones must create the ignored tally-output directories before running tally (documented in [`docs/BUILD.md`](docs/BUILD.md))
 
-Resolved in the 2026-08-25 server hardening pass: Cloudflare-aware rate limiting, auth-failure throttling, generic error responses, locally pinned snarkjs, the exactly-100-votes finalize case, server-side ciphertext point validation (a mitigation — the circuit gap in the table above remains), and the `package.json` license field. Full list and details: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
+Resolved in the 2026-08-25 server hardening pass: Cloudflare-aware rate limiting, auth-failure throttling, generic error responses, locally pinned snarkjs, the exactly-100-votes finalize case, server-side ciphertext point validation (a mitigation — the circuit gap in the table above remains), and the `package.json` license field. Added 2026-08-27: the snapshot scripts refuse to adopt an on-chain voteId unknown to the local DB (explicit `--adopt` for open ids only), finalize/tally/submit refuse already-finalized ids, and `scripts/listVoteIds.js` lists on-chain voteId state — on-chain voteId state is permanent, so ids must never be reused. Full list and details: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
 
 ---
 

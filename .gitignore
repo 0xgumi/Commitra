@@ -5,6 +5,7 @@ node_modules/
 public/dist/
 tally_outputs/
 recovery_logs/
+cache/
 snapshots/
 coordinator_key.json
 tally_final.zkey
