@@ -57,6 +57,7 @@ node scripts/listVoteIds.js product            # full scan: state + VoteSubmitte
 ```
 
 `createSnapshot.js` refuses an existing on-chain id that this DB does not know (`--adopt` attaches OPEN ids only; closed/dummy/finalized ids are refused). finalize/tally/submitTally refuse already-finalized ids.
+Add `--out [path]` to regenerate the used-id ledger `cache/voteids_product.md` from chain (two header lines, then the used ids ascending on one line — numbers only, no state). `createSnapshot.js` refreshes it automatically right after creating a new id (skipped with a hint if no scan cache exists yet). Never edited or appended by hand.
 
 ## 3. Register coordinators on-chain (with the server stopped)
 

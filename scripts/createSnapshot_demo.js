@@ -3,6 +3,7 @@ require('dotenv').config({ path: '.env.demo', quiet: true });
 const path = require("path");
 const Database = require("better-sqlite3");
 const { ownerVotingContract, ownerTallyContract } = require("../src/config/onchain");
+const { refreshUsedVoteIdLedger, hasCache } = require("./listVoteIds");
 
 const dbPath = path.join(__dirname, "../src/db/voting_demo.db");
 const db = new Database(dbPath);
@@ -78,11 +79,13 @@ async function main() {
     console.log(`⚠ Adopting existing OPEN on-chain voteId ${voteId}; roots registered before this DB remain valid on-chain`);
   }
 
+  let createdOnChain = false;
   if (isValid) {
     console.log(`✓ voteId ${voteId} already exists on-chain`);
   } else {
     const tx = await ownerVotingContract.createVoteId(voteId);
     await tx.wait();
+    createdOnChain = true;
     console.log(`✓ createVoteId tx: ${tx.hash}`);
   }
 
@@ -92,6 +95,20 @@ async function main() {
     console.log("✓ active_votes: inserted");
   } else {
     console.log("✓ active_votes: already synced");
+  }
+
+  // 3. used-voteId 원장 갱신 (실패해도 투표 생성은 성공; 다음 listVoteIds 실행이 바로잡음)
+  if (createdOnChain) {
+    if (!hasCache("demo")) {
+      console.warn("⚠ used-voteId ledger not updated: no scan cache yet. Run once: node scripts/listVoteIds.js demo --out");
+    } else {
+      try {
+        const ledger = await refreshUsedVoteIdLedger("demo");
+        console.log(`✓ used-voteId ledger updated: ${path.relative(process.cwd(), ledger.path)} (${ledger.count} ids)`);
+      } catch (err) {
+        console.warn(`⚠ used-voteId ledger not updated (${err.message}). Run: node scripts/listVoteIds.js demo --out`);
+      }
+    }
   }
 
   console.log(`\n✅ Demo vote created successfully!`);
