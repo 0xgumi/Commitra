@@ -1,6 +1,6 @@
 # Commitra
 
-Commitra is a **solo research implementation** of privacy-preserving, token-weighted voting for the EVM ecosystem, built on homomorphic aggregation: votes are ElGamal-encrypted in the browser, homomorphically summed, and **only the aggregate is ever decrypted** in the implemented tally path. Under the current single-key coordinator this is protocol behaviour, not a cryptographically enforced guarantee (see the threat model). Vote validity and tally computation are proven with Groth16 ZK proofs and verified on-chain (Ethereum Sepolia).
+Commitra is a **solo research implementation** of privacy-preserving, token-weighted voting for the EVM ecosystem, built on homomorphic aggregation: votes are ElGamal-encrypted in the browser, homomorphically summed, and **only the aggregate is ever decrypted** in the implemented tally path. Under the current single-key coordinator this is protocol behaviour, not a cryptographically enforced guarantee (see the threat model). Groth16 proofs for the precisely scoped vote/tally statements below are verified on-chain (Ethereum Sepolia).
 
 This repository contains the **full source**: circuits, contracts, server, client, and operational scripts, together with the protocol specification and a precise map of what the proofs do and do not guarantee.
 
@@ -12,7 +12,7 @@ This repository contains the **full source**: circuits, contracts, server, clien
 
 ## Design in one paragraph
 
-Eligible voters are listed in a per-vote snapshot (EOA → weight). Each voter derives a deterministic keypair from a wallet signature, registers a commitment leaf into a Merkle tree, and submits ElGamal ciphertexts — `encrypt(weight)` for the chosen option, `encrypt(0)` for the rest — with a Groth16 proof of Merkle membership, nullifier correctness, and an EdDSA signature binding the ciphertexts. A coordinator relays all transactions (voter EOAs never appear on-chain), homomorphically sums the ciphertexts after closing, decrypts **the aggregate only**, and submits a second Groth16 proof that the published result is the correct decryption of the sum of a committed batch. Full specification: [`docs/REVISION19.md`](docs/REVISION19.md).
+Eligible voters are listed in a per-vote snapshot (EOA → weight). Each voter derives a deterministic keypair from a wallet signature, registers a commitment leaf into a Merkle tree, and submits ElGamal ciphertexts — `encrypt(weight)` for the chosen option, `encrypt(0)` for the rest — with a Groth16 proof of Merkle membership, nullifier derivation from a supplied secret, and an EdDSA signature binding the ciphertext hash. A coordinator relays all transactions (participant EOAs are absent from the intended on-chain submission path), homomorphically sums the ciphertexts after closing, decrypts **the aggregate only** in the implemented tally path, and submits a second Groth16 proof. That proof constrains group-element aggregation/decryption for a committed batch; it does not bind the batch to the submitted set or enforce a unique canonical integer tally. Full specification: [`docs/REVISION19.md`](docs/REVISION19.md).
 
 ---
 
@@ -25,11 +25,12 @@ The honest version, condensed (full statement: [`docs/REVISION19.md`](docs/REVIS
 | Merkle membership under an accepted root | Ciphertexts are well-formed ElGamal encryptions (valid curve points) — the server now rejects invalid points, but the circuit does not constrain them |
 | Each nullifier is spendable once per vote (on-chain) | Plaintexts are in `{0, weight}`, one choice only |
 | Ciphertexts stored for tally are exactly those the proof committed to (server-checked) | **One vote per voter** — the nullifier is not circuit-bound to the leaf or key; a modified client can derive fresh nullifiers from the same leaf and re-vote |
-| Tally = correct sum + decryption of a committed batch | Committed weight equals the snapshot weight (server-gated, not circuit-bound) |
+| Aggregate group element = homomorphic sum of a proof-committed batch | Committed weight equals the snapshot weight (server-gated, not circuit-bound) |
+| Published tally scalar maps to the decrypted aggregate point | Published tally is the unique canonical integer in the supported range |
 | — | The tallied batch equals the canonical on-chain submitted set |
 | — | The coordinator decrypted only the aggregate (single-key ElGamal cannot prove this) |
 
-Consequences, stated plainly: a malicious **voter** with a modified client could corrupt the aggregate with malformed ciphertexts, or vote multiple times from one leaf; a malicious **coordinator** could tally a different batch than what was submitted, and could technically decrypt individual ciphertexts. The implementation demonstrates the honest-participant flow end-to-end; it does not yet remove these trust assumptions. See [`docs/threat-model.md`](docs/threat-model.md).
+Consequences, stated plainly: a malicious **voter** with a modified client could corrupt the aggregate with unconstrained plaintext values, or vote multiple times from one leaf; a malicious **coordinator** could tally a different batch, replay a tally proof to another eligible voteId, publish a non-canonical scalar representative, and technically decrypt individual ciphertexts. The implementation demonstrates the honest-participant flow end-to-end; it does not yet remove these trust assumptions. See [`docs/threat-model.md`](docs/threat-model.md).
 
 ---
 
@@ -37,19 +38,21 @@ Consequences, stated plainly: a malicious **voter** with a modified client could
 
 - **Single coordinator** holds the ElGamal key: aggregate-only decryption is a protocol norm, not an enforced property.
 - **Relayer censorship**: the coordinator can decline to relay a vote.
-- **Server-side registration**: the server does not store an EOA↔leaf link, but could correlate one at registration time (timing/session). Unlinkability claims are scoped to **chain observers**.
+- **Server-side registration**: `leaf_data` has no explicit EOA column, but the server stores EOA snapshot records and can correlate registration via timing/session/order/logs (Demo also prints new EOAs to stdout). Unlinkability claims are scoped to **chain observers**.
 - **Trusted setup**: both proving keys were produced with a **single phase-2 contribution** by the author. Soundness rests on that contribution's randomness being discarded. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
 - **Not receipt-free** (intentional scope): a voter can reveal ElGamal randomness to prove their vote. Anti-collusion is out of scope; this design prioritizes limiting what everyone — operator included — learns.
 
 ---
 
-## Known issues (tracked)
+## Selected implementation issues
 
-Implementation issues that remain open; none affects the honesty of the claims above, and no live vote is running on the Product deployment:
+Operational subset, not an exhaustive roadmap. At the 2026-08-26 publication-preparation snapshot, the local Product database had no open vote:
 
 - The leaf admission token's single-use set is in-memory (a restart clears it until tokens expire; the registration cap still bounds leaves)
 - `leafLocks` has no TTL; no graceful shutdown handlers; error response format not standardized
 - Snapshot weights are not validated against the BSGS-recoverable range at snapshot creation
+- Product can accept more than 100 real permits; `finalize` detects this only after closing and cannot produce a tally for that voteId
+- Fresh clones must create the ignored tally-output directories before running tally (documented in [`docs/BUILD.md`](docs/BUILD.md))
 
 Resolved in the 2026-08-25 server hardening pass: Cloudflare-aware rate limiting, auth-failure throttling, generic error responses, locally pinned snarkjs, the exactly-100-votes finalize case, server-side ciphertext point validation (a mitigation — the circuit gap in the table above remains), and the `package.json` license field. Full list and details: [`docs/REVISION19.md`](docs/REVISION19.md) §17.5.
 
@@ -90,7 +93,7 @@ Recorded runs: [`samples/demo/walkthrough.md`](samples/demo/walkthrough.md), [`s
 
 ## Demo
 
-A request-based demo runs on Sepolia. It is an **honest-client flow demonstration**, not an adversarially secure election — and it is most useful as a **self-verification device**: vote from several wallets you control, then check that the on-chain tally equals the sum of your own weights. No gas needed from participants. Details and constraints: [`docs/demo.md`](docs/demo.md). Access: DM [@0xgumi](https://x.com/0xgumi).
+A request-based demo runs on Sepolia. It is an **honest-client flow demonstration**, not an adversarially secure election — and it is most useful as a **self-verification device**: vote from several wallets you control, then check that the on-chain tally equals the sum of your own weights. This detects omissions or substitutions that change participant-known totals; it does not establish exact batch identity. No gas is paid by participants in the standard client flow. Details and constraints: [`docs/demo.md`](docs/demo.md). Access: DM [@0xgumi](https://x.com/0xgumi).
 
 ---
 

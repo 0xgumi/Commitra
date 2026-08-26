@@ -24,15 +24,15 @@ This is a **research implementation**: a minimal construction implemented end-to
 
 ## Can the coordinator manipulate the result?
 
-It cannot publish a result that isn't the correct sum-and-decryption of *some* committed batch — the tally proof prevents that. But it **chooses the batch**: the contract does not check that the tallied batch matches the votes submitted on-chain, so omission or substitution is not automatically detectable today. It can also simply decline to relay a vote. See [`threat-model.md`](threat-model.md) for the full honest list.
+It must publish aggregate/result signals that satisfy the tally circuit's group equations for *some* committed private batch. But it **chooses the batch**, the proof is replayable to another eligible voteId, and the published tally scalars are not constrained to a unique canonical integer range. The contracts also treat dummy registration as a boolean rather than validating padding contents. The coordinator can additionally decline to relay a vote or close a vote early. See [`threat-model.md`](threat-model.md) for the full list.
 
 ---
 
 ## Can a voter cheat?
 
-With the standard client, no: re-votes are rejected (the nullifier is derived deterministically, and each nullifier is spendable once on-chain).
+With the standard client, an honest re-vote is rejected because the same exact nullifier is derived and that nullifier is spendable once per voteId.
 
-With a modified client, currently yes, in two ways. First, the nullifier is not circuit-bound to the voter's leaf or key, so a modified client can derive fresh nullifiers from the same leaf and vote multiple times — one-voter-one-vote is not cryptographically enforced. Second, a modified client can submit out-of-range plaintexts that a valid-looking proof does not exclude — the vote circuit does not yet constrain the `{0, weight}` range (malformed curve points are now rejected server-side, but that only holds while the server is honest; the circuit does not constrain them either). These are the most important known gaps; fixing them is the next circuit revision.
+A modified/direct client can currently violate more: the server does not verify ownership of an EOA submitted to `/weight`; the nullifier is not circuit-bound to the leaf/key; and the vote circuit does not constrain plaintexts to `{0, weight}` or bind committed weight to the snapshot. Malformed points are rejected server-side, but valid-point arbitrary plaintexts remain possible. These are current gaps; authenticated admission and the next vote-circuit revision are the stated directions.
 
 ---
 

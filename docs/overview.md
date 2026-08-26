@@ -2,7 +2,7 @@
 
 Commitra is a research implementation of privacy-preserving, token-weighted voting that combines off-chain computation with on-chain Groth16 proof verification.
 
-The design goal is **data minimization**: the system publishes only the aggregate result, and by protocol design no individual vote is decrypted — while being explicit that, in the current single-coordinator version, this is a norm the operator follows, not a property cryptography enforces (see [`threat-model.md`](threat-model.md)).
+The design goal is **data minimization**: only the aggregate is published as a plaintext voting result. Proofs, public signals/hashes and the aggregate are on-chain; individual ciphertext coordinates remain server-side. The implemented tally path decrypts the aggregate rather than individual ballots, but in the current single-coordinator version this is an operator norm, not a cryptographically enforced property (see [`threat-model.md`](threat-model.md)).
 
 This document is a high-level orientation. The precise specification — circuit I/O, contract internals, API, proof scope — is [`REVISION19.md`](REVISION19.md).
 
@@ -11,7 +11,7 @@ This document is a high-level orientation. The precise specification — circuit
 ## Design goals
 
 1. **Voter address privacy against chain observers**
-   The voter's EOA never appears on-chain; all transactions are relayed by the coordinator. Nothing on-chain links an address to a vote.
+   In the intended relayer flow, no participant EOA appears in vote calldata, state or events; proofs/public signals remain public, and the contract does not require coordinator and participant addresses to differ.
 
 2. **Aggregate-only decryption by construction**
    Votes are ElGamal-encrypted and homomorphically summed; the tally pipeline decrypts the sum, not the parts. (The single coordinator key *could* decrypt parts — see trust assumptions.)
@@ -38,12 +38,12 @@ This document is a high-level orientation. The precise specification — circuit
 - Relays all transactions; pays all gas
 - After closing: homomorphically sums ciphertexts, decrypts the aggregate, generates the tally proof
 
-The server stores leaves without EOAs. It could, however, correlate EOA↔leaf at registration time through session metadata — the unlinkability guarantee is against chain observers, not against the server itself.
+The server stores EOA→weight records in `snapshot`; `leaf_data` has no explicit EOA column. Timing/session/order/logs can still correlate EOA↔leaf, and Demo prints new registration EOAs to stdout. The unlinkability guarantee is against chain observers, not the server.
 
 ### 3. Smart contracts (Ethereum Sepolia)
 
-- `VotingContract` + auto-generated verifier: checks each vote proof, enforces per-vote nullifier uniqueness, records Merkle roots
-- `TallyContract` + auto-generated verifier: checks the tally proof and records the final result immutably per voteId
+- `VotingContract` + auto-generated verifier: checks each vote proof, enforces exact-nullifier uniqueness per voteId, and records coordinator-accepted roots
+- `TallyContract` + auto-generated verifier: checks the tally proof and records result signals once per caller-supplied voteId; the proof itself is not voteId/deployment-bound and the result scalars are not canonically range-bounded
 
 ---
 
@@ -52,14 +52,14 @@ The server stores leaves without EOAs. It could, however, correlate EOA↔leaf a
 1. **Snapshot** — coordinator registers the eligible EOA → weight list for a voteId
 2. **Registration** — voter derives secrets, registers a commitment leaf (gated by a short-lived admission token issued after the snapshot check)
 3. **Voting** — encrypt, prove, submit; the server verifies the ciphertexts match the proof's public hash before relaying on-chain
-4. **Finalize** — voting closed on-chain; batch padded to 100 with zero-weight dummy votes
+4. **Finalize** — the standard script closes voting and pads the DB batch to 100 with zero-weight dummy votes; on-chain the contract validates only that dummy registration was called once after closure, not padding contents/count
 5. **Tally** — homomorphic sum → aggregate decryption (BSGS discrete log) → tally proof → on-chain result
 
 ---
 
 ## Multi-vote support
 
-Vote sessions are isolated per `voteId`: separate snapshots, Merkle trees, nullifier sets, and results. The same EOA can participate in multiple sessions; nullifiers are voteId-scoped, so votes are not linkable across sessions on-chain.
+Snapshots, Merkle-root/nullifier mappings and result storage are keyed per `voteId`. The same EOA can participate in multiple sessions, and the standard client derives vote-specific credentials. The tally proof itself is **not** voteId/deployment-bound, so tally finalization is not yet cryptographically isolated between voteIds.
 
 ---
 

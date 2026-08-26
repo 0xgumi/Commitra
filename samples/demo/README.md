@@ -12,7 +12,7 @@ A complete vote lifecycle recorded and verifiable on Sepolia:
 
 **[View the full walkthrough](./walkthrough.md)** — vote creation, three encrypted vote submissions, vote closure, and on-chain tally finalization, with browser screenshots and transaction links.
 
-The walkthrough follows the **self-verification pattern**: all three voters were wallets controlled by the operator, so the on-chain result could be checked directly against known weights and choices. That is the strongest check the current system supports from the outside (see [`../../docs/verification.md`](../../docs/verification.md) §3).
+The walkthrough follows the **self-verification pattern**: all three voters were wallets controlled by the operator, so the finalized result could be checked against known arithmetic totals. This detects changes to those totals; it does not prove exact batch identity (see [`../../docs/verification.md`](../../docs/verification.md) §3).
 
 ---
 
@@ -25,7 +25,7 @@ The walkthrough follows the **self-verification pattern**: all three voters were
 | Participants per vote | Snapshot size | Capped at 80 |
 | Network | Ethereum Sepolia | Ethereum Sepolia |
 
-Circuits, contracts, encryption, proofs, and the tally pipeline are identical; only the eligibility policy differs. Full context: [`../../docs/demo.md`](../../docs/demo.md).
+Circuit/contract source and the cryptographic flow are parallel, while Demo uses separate deployments, server/router entrypoints, database, configuration and UI disclosure. Open auto-registration is the main policy difference. Full context: [`../../docs/demo.md`](../../docs/demo.md).
 
 (An earlier version of this page stated demo weights of "1–80"; the correct range in the code is 1–100. The 80 figure is the participant cap.)
 

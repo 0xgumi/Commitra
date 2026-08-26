@@ -25,7 +25,7 @@ LEAF_TOKEN_SECRET=your_random_secret
 # LEAF_TOKEN_TTL_SEC=600
 ```
 
-For tallying, `COORDINATOR_PRIVKEY` goes in `.env.demo.tally`.
+The tally script loads `.env.demo.tally` separately; that file must contain both `COORDINATOR_PUBKEY` and `COORDINATOR_PRIVKEY`.
 
 ## 0-1. How the leaf admission token works
 
@@ -86,6 +86,7 @@ node scripts/finalize_demo.js 1
 ## 7. Compute tally + generate proof (per voteId)
 
 ```bash
+mkdir -p tally_outputs/demo  # once per fresh clone
 node src/lib/tally_demo.js 1
 ```
 
@@ -99,26 +100,27 @@ node src/lib/submitTally_demo.js 1
 
 ## Full flow (single vote, voteId=1)
 
+The server is a foreground process. Run it in a dedicated terminal and leave it running while participants vote; run lifecycle commands in another terminal.
+
 ```bash
-# one-time setup
+# terminal 1 — one-time setup, then server
 rm src/db/voting_demo.db
 node src/db/init_demo.js
 node scripts/setup_demo.js
-
-# create the vote (empty snapshot)
 node scripts/createSnapshot_demo.js 1 "Demo Vote #1"
-
-# build & run
 npm run build:demo
 node src/server_demo.js
+```
 
-# (participants connect with MetaMask, auto-register, vote...)
-
-# close & tally
+```bash
+# terminal 2 — after participants finish
+mkdir -p tally_outputs/demo
 node scripts/finalize_demo.js 1
 node src/lib/tally_demo.js 1
 node src/lib/submitTally_demo.js 1
 ```
+
+Keep the server running through `finalize_demo` if you want `/cleanup-locks` to run; that cleanup call is non-critical if the server is stopped.
 
 ---
 

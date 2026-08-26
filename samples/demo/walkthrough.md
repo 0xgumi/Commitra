@@ -131,7 +131,7 @@ The on-chain result cross-checked against the known inputs:
 - **NO total:** 72 = **72**
 - **ABSTAIN total:** 0 = **0**
 
-The on-chain tally matches the known inputs exactly. Because all voters in this record are the recorder's own wallets, this check also confirms — for this run — that no vote was omitted or substituted. (The chain alone does not enforce that in general; see below.)
+The on-chain tally matches the known inputs exactly. This detects any omission, substitution or miscount that would have changed these participant-known totals. It does **not** establish exact batch identity: a different batch can produce the same aggregate, and the chain does not bind the proof to the submitted set.
 
 ### On-chain event log
 
@@ -149,6 +149,6 @@ This walkthrough demonstrates, with public artifacts:
 2. Three ballots encrypted client-side and accepted only with valid ZK proofs
 3. No vote choice and no voter address in any on-chain transaction
 4. Formal on-chain closure, then tally finalization gated by a ZK proof
-5. An on-chain result that **exactly matches the known inputs** of the recorded run
+5. An on-chain result that **exactly matches the known arithmetic totals** of the recorded run (not a proof of exact batch identity)
 
 And it is explicit about scope: this is the **honest-participant flow**. The tally proof shown here binds the result to *a* committed batch, not to the on-chain submitted set; the coordinator's key could technically decrypt individual ballots; and a hostile client could submit ciphertexts the current circuit does not exclude. The precise boundary is in [`../../docs/REVISION19.md`](../../docs/REVISION19.md) §17.3 — publishing that boundary, next to a working flow, is what this repository is for.

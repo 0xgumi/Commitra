@@ -28,6 +28,8 @@ The next vote circuit must prove: well-formed ElGamal ciphertexts on the curve's
 
 **Problem 3 — scale**: one fixed batch of 100 does not scale; aggregation needs to handle 10k+ votes without proportionally growing a single circuit.
 
+**Problem 4 — canonical result scalars**: the current tally proof equates published scalars with decrypted BabyJub group elements but does not enforce a unique supported integer representation or total-weight bound. The tally revision must add strict scalar/range/total constraints shared by the circuit and contract.
+
 ## Exploratory
 
 Titles and problem statements only:

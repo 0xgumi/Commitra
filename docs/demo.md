@@ -12,7 +12,7 @@ The demo is a live, request-based deployment of Commitra on Ethereum Sepolia. It
 
 Vote from **several wallets you control**. Record your own weights and choices. After finalization, check that the on-chain tally equals your sums.
 
-This makes the verification loop fully yours: since every voter is you, you would directly notice if a vote were omitted, substituted, or miscounted — the one check the on-chain record alone cannot give you (see [`verification.md`](verification.md) §1). A recorded example of exactly this: [`../samples/demo/walkthrough.md`](../samples/demo/walkthrough.md).
+This makes the arithmetic check yours: if the finalized totals differ from the sums you recorded, the run omitted, substituted or miscounted something that changed those totals. Matching totals do **not** establish exact batch identity, because a different batch can produce the same aggregate. A recorded honest-flow example: [`../samples/demo/walkthrough.md`](../samples/demo/walkthrough.md).
 
 ---
 
@@ -25,7 +25,7 @@ This makes the verification loop fully yours: since every voter is you, you woul
 | Participants per vote | Snapshot size (tree supports ~32k) | Capped at 80 |
 | Server / database | Separate instance and DB | Separate instance and DB |
 
-Everything else — circuits, contracts, encryption, proofs, tally pipeline — is identical. The demo runs the same code paths with an open eligibility policy.
+Product and Demo use byte-identical circuit/contract source and parallel encryption/proof/tally logic, but they are separate deployments with separate configuration, databases, server/router entrypoints and UI disclosure. Open auto-registration is the main protocol-policy difference.
 
 Notes on the constraints:
 
@@ -37,7 +37,7 @@ Notes on the constraints:
 ## Practical details
 
 - **Network**: Ethereum Sepolia only; no mainnet assets
-- **Gas**: participants pay nothing; the coordinator relays all transactions
+- **Gas**: in the standard client flow, participant wallets sign but submit no transaction; coordinator/owner wallets relay and pay gas
 - **Access**: request-based — DM [@0xgumi](https://x.com/0xgumi) with a sentence about your context. You'll get the URL, access password, and an active voteId
 - **Contracts**: listed in the [README](../README.md#deployments-ethereum-sepolia); all demo transactions are publicly visible
 
@@ -46,8 +46,8 @@ Notes on the constraints:
 ## What a demo run shows — precisely
 
 - The full lifecycle works end-to-end: registration → encrypted ballot → browser-side Groth16 proof (~30 s) → on-chain verification → homomorphic tally → on-chain finalization
-- No vote choice and no voter EOA appear anywhere on-chain
+- No plaintext vote choice or participant EOA appears in the intended on-chain vote path; proofs, public signals/hashes and the final aggregate are public
 - Double voting from the same wallet is rejected (standard client)
-- The finalized result matches the participant-known sum (when you use the self-verification pattern above)
+- The finalized result can be compared with participant-known sums; equality checks arithmetic, not exact batch identity
 
 What it does not show: that a *hostile* participant or operator couldn't break the properties above. That boundary is drawn, precisely, in [`REVISION19.md`](REVISION19.md) §17.3.

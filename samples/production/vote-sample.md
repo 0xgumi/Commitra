@@ -28,15 +28,16 @@
 
 ## What this transaction establishes
 
-- The on-chain Groth16 verifier accepted a proof of Merkle membership under a registered root, with a fresh voteId-scoped nullifier (this nullifier can never be reused)
+- The on-chain Groth16 verifier accepted a proof of Merkle membership under a coordinator-accepted root, with an exact nullifier not previously used within voteId 11
 - The proof's public signals bind a specific ciphertext hash — the ciphertexts the server stores for tallying are the ones this proof committed to
-- No voter EOA and no vote choice appear in the transaction (submitted by a coordinator wallet)
+- No participant EOA, plaintext vote choice or individual ciphertext coordinates appear in the transaction. The proof and all eight public signals (root, voterID, nullifier, ciphertext hash, voteId, pubkey commitment, chainId, voteHash) are public
 
 ## What it does not establish
 
 - That the encrypted ballot is a well-formed encryption of an in-range vote — the current circuit does not constrain this
 - That this leaf holder voted only once — the nullifier is not circuit-bound to the leaf, so a modified client could vote again under a different nullifier
 - That the committed weight matches the snapshot entry — server-gated, not circuit-bound
+- That the caller owned the EOA submitted to `/weight` — the server does not currently verify EOA ownership
 
 See [`../../docs/verification.md`](../../docs/verification.md) and [`../../docs/threat-model.md`](../../docs/threat-model.md).
 

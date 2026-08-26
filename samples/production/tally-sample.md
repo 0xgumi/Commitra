@@ -38,13 +38,15 @@
 
 ## What this transaction establishes
 
-- The on-chain verifier accepted a Groth16 proof that this result is the correct homomorphic sum and decryption of **a batch** of 100 ciphertext sets committed by the proof's batch hash, under the registered coordinator public key
-- Finalization happened only after voting was closed and dummy padding registered (contract-enforced ordering)
-- The result is recorded immutably per voteId (one finalization only)
+- The on-chain verifier accepted a Groth16 proof whose aggregate/result signals satisfy the circuit's group equations for **a private batch** of 100 ciphertext sets committed by the proof's batch hash, under constructor-configured public-key coordinates
+- Finalization happened after the configured VotingContract reported voting closed and its dummy-registration boolean set; padding contents/count are not contract-validated
+- These signals are recorded once under caller-supplied voteId 11
 
 ## What it does not establish
 
 - That the committed batch equals the set of votes submitted on-chain — the contract does not reconstruct the batch hash from `VoteSubmitted` events; batch selection is trusted to the coordinator
+- That the proof is bound to voteId 11 or this deployment — replay to another eligible voteId/deployment is possible
+- That each published result is the unique canonical integer tally — neither circuit nor contract enforces the intended tally range/total bound
 - That only the aggregate was decrypted — unprovable under single-key ElGamal
 
 See [`../../docs/verification.md`](../../docs/verification.md) and [`../../docs/threat-model.md`](../../docs/threat-model.md).

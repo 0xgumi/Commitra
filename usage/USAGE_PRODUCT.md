@@ -23,7 +23,7 @@ LEAF_TOKEN_SECRET=your_random_secret
 - `LEAF_TOKEN_SECRET`: HMAC key for `leafAdmissionToken` (**required** — server refuses to start without it)
 - `LEAF_TOKEN_TTL_SEC`: admission token TTL in seconds (default 600)
 
-Also required (see `docs/BUILD.md`): `RPC_URL`, `OWNER_PRIVATE_KEY`, `COORDINATOR_PRIVATE_KEYS`, `VOTING_CONTRACT_ADDRESS`, `TALLY_CONTRACT_ADDRESS`, `COORDINATOR_PUBKEY`; for tallying, `COORDINATOR_PRIVKEY` in `.env.tally`.
+Also required (see `docs/BUILD.md`): `RPC_URL`, `OWNER_PRIVATE_KEY`, `COORDINATOR_PRIVATE_KEYS`, `VOTING_CONTRACT_ADDRESS`, `TALLY_CONTRACT_ADDRESS`, `COORDINATOR_PUBKEY`. The tally script loads `.env.tally` separately, so that file must contain both `COORDINATOR_PUBKEY` and `COORDINATOR_PRIVKEY`.
 
 Notes:
 
@@ -78,6 +78,7 @@ node scripts/finalize.js 1
 ## 7. Compute tally + generate proof (per voteId)
 
 ```bash
+mkdir -p tally_outputs/product  # once per fresh clone
 node src/lib/tally.js 1
 ```
 
@@ -91,23 +92,24 @@ node src/lib/submitTally.js 1
 
 ## Full flow (single vote, voteId=1)
 
+The server is a foreground process. Run it in a dedicated terminal and leave it running while participants vote; run lifecycle commands in another terminal.
+
 ```bash
-# one-time setup
+# terminal 1 — one-time setup, then server
 rm src/db/voting.db
 node src/db/init.js
 node scripts/setup.js
-
-# create the vote
 node scripts/createSnapshot.js snapshots/vote1.json
-
-# build & run
 npm run build
 node src/server.js
+```
 
-# (voters vote in the browser...)
-
-# close & tally
+```bash
+# terminal 2 — after voters finish
+mkdir -p tally_outputs/product
 node scripts/finalize.js 1
 node src/lib/tally.js 1
 node src/lib/submitTally.js 1
 ```
+
+Keep the server running through `finalize` if you want `/cleanup-locks` to run; that cleanup call is non-critical if the server is stopped.

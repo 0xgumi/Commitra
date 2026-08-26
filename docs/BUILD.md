@@ -38,7 +38,13 @@ node src/db/init.js       # initialize SQLite DB (Product; init_demo.js for Demo
 node src/server.js        # Product server, port 3000 (server_demo.js → port 4000)
 ```
 
-Required environment (`.env` / `.env.demo` — names only, set your own values): `RPC_URL`, `OWNER_PRIVATE_KEY`, `COORDINATOR_PRIVATE_KEYS`, `VOTING_CONTRACT_ADDRESS`, `TALLY_CONTRACT_ADDRESS`, `COORDINATOR_PUBKEY`, `LEAF_TOKEN_SECRET`, `INTERNAL_API_TOKEN`, `BASIC_AUTH_PASSWORD` (optional). Tallying additionally needs `COORDINATOR_PRIVKEY` in `.env.tally`.
+Required environment (`.env` / `.env.demo` — names only, set your own values): `RPC_URL`, `OWNER_PRIVATE_KEY`, `COORDINATOR_PRIVATE_KEYS`, `VOTING_CONTRACT_ADDRESS`, `TALLY_CONTRACT_ADDRESS`, `COORDINATOR_PUBKEY`, `LEAF_TOKEN_SECRET`, `INTERNAL_API_TOKEN`, `BASIC_AUTH_PASSWORD` (optional).
+
+The tally scripts load only their dedicated file, not the server file: Product tallying needs both `COORDINATOR_PUBKEY` and `COORDINATOR_PRIVKEY` in `.env.tally`; Demo tallying needs both in `.env.demo.tally`. Before the first tally in a fresh clone, create the ignored output directories:
+
+```bash
+mkdir -p tally_outputs/product tally_outputs/demo
+```
 
 Full lifecycle operation (snapshot → votes → finalize → tally → submit): step-by-step guides in [`../usage/`](../usage/).
 
@@ -49,6 +55,7 @@ Full lifecycle operation (snapshot → votes → finalize → tally → submit):
 Recompile (from the repository root — the `-l .` flag is required because the circuits' `include` paths are `node_modules/circomlib/...`, resolved relative to the link path, not the circuit file's directory):
 
 ```bash
+mkdir -p build/vote build/tally
 circom circuits/vote/vote.circom  --r1cs --wasm -l . -o build/vote
 circom circuits/tally/tally.circom --r1cs --wasm -l . -o build/tally
 ```

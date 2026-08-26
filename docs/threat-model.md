@@ -19,8 +19,8 @@ Standard cryptographic hardness assumptions apply throughout, plus one system-sp
 
 ## Against a chain observer — enforced
 
-- No voter EOA appears on-chain; all transactions come from coordinator wallets
-- No vote choice appears on-chain; only ciphertext hashes, proofs, nullifiers, and the final aggregate
+- In the intended relayer flow, the contract records no participant EOA; state-changing vote transactions come from authorized coordinator wallets
+- No plaintext vote choice or individual ciphertext coordinates appear on-chain. A vote transaction does publish the proof and all eight public signals: Merkle root, voterID, nullifier, encryptedVotesHash, voteId, pubkeyCommitment, chainId and voteHash
 - Nullifiers are voteId-scoped and derived from voter secrets; they do not link across votes
 - The recorded result cannot be modified after `finalizeTally` (contract enforces one finalization per voteId)
 
@@ -28,12 +28,12 @@ These are the strongest properties the system has, and they are the ones the dem
 
 ---
 
-## Against an ineligible outsider — enforced, with a caveat
+## Against an ineligible outsider — NOT identity-enforced
 
-- Submitting a vote requires a Groth16 proof of Merkle membership under a root the contract accepts; without a registered leaf there is no proof
-- Leaf registration is gated by a short-lived, single-use admission token issued only after the server's snapshot check, plus a per-vote registration cap
+- Submitting a vote requires a Groth16 proof of membership under a root the contract accepts
+- New leaf registration requires a short-lived bearer token issued after the **submitted EOA string** appears in the Product snapshot (Demo: after auto-registration), plus a per-vote total cap
 
-Caveat: the admission token is a **server-side gate, not a cryptographic binding** — it deliberately encodes neither the EOA nor the leaf (to avoid storing an EOA↔leaf link). Nothing cryptographically ties a registered leaf's committed weight to a specific snapshot entry. Circuit-level snapshot binding is future work.
+The server does not verify ownership of the submitted EOA, does not limit token issuance to once per EOA, and does not bind the token to that EOA or to a leaf. A Basic-Auth holder who knows a snapshot-listed address can obtain its weight/token without owning it and can repeat admission until the total cap is consumed. The token is therefore an admission-rate gate, not identity authentication or cryptographic eligibility. Direction: authenticated once-per-EOA admission, followed by circuit-level eligibility/weight binding.
 
 ---
 
@@ -60,17 +60,23 @@ Any of these can corrupt the aggregate or the tally's decodability. This is the 
 The coordinator **cannot**:
 
 - Forge a vote proof for a leaf it does not control (Groth16 soundness, assuming the setup — see below). Note the limit of this statement: it does not prevent the coordinator from voting with leaves it *does* control — see root stuffing below
-- Publish a tally result that is not the correct sum-and-decryption of *some* batch of 100 ciphertext sets (tally proof)
+- Publish aggregate/result signals that do not satisfy the tally circuit's group equations for *some* private batch of 100 ciphertext sets
 - Finalize a tally twice, or before voting is closed on-chain
 
 The coordinator **can, currently**:
 
 - **Decrypt individual ciphertexts.** It holds the single ElGamal private key. Aggregate-only decryption is a protocol norm the implementation follows, not an enforced property. Removing this requires threshold decryption (planned)
-- **Stuff the voter set.** `updateRoot` is coordinator-only and marks any submitted root valid without constraint — a coordinator can insert leaves it controls (or an entirely fabricated tree) into the accepted root set and then vote with those leaves using valid proofs. Nothing on-chain ties accepted roots to the published snapshot
-- **Choose the batch.** The tally proof commits to a batch hash, but the contract does not reconstruct that hash from the on-chain `VoteSubmitted` events. A coordinator could tally a batch that omits or substitutes submitted votes and still produce a valid proof. Omission/substitution is **not** automatically detectable on-chain today; a participant can only compare the on-chain event count against the claimed batch out-of-band
+- **Stuff or preserve voter roots.** `updateRoot` marks any supplied bytes32 (including zero) valid without tying it to the snapshot. Every accepted historical root remains valid; there is no root revocation
+- **Close early and irreversibly.** The contract enforces no deadline, quorum, minimum ballot count or root-existence condition
+- **Set an unvalidated dummy-registration flag.** `registerDummyVotes` accepts arbitrary hashes/count (including an empty array), emits them and sets a boolean; it does not prove zero-weight padding or bind padding to the tally
+- **Choose the batch.** The contracts do not reconstruct the tally commitment from `VoteSubmitted`/dummy events. Omission/substitution is not automatically detectable on-chain
+- **Replay a tally proof across voteIds/deployments.** voteId, chainId and contract identity are absent from tally public signals. Per-voteId storage prevents only a second write to the same key; it does not bind the proof to that key
+- **Publish a non-canonical tally scalar.** The circuit checks equality as a BabyJub group element, while neither circuit nor contract bounds the results to a unique canonical integer/tally range
 - **Censor**: decline to relay a vote (the vote then never appears on-chain at all)
-- **Correlate EOA↔leaf at registration time** via session metadata (timing, source address, token issuance order), even though no such link is persisted
+- **Correlate EOA↔leaf at registration time** via snapshot records, timing, source address, token order and logs. Demo registration also prints new EOAs to server stdout; the absence of an EOA column in `leaf_data` is not cryptographic unlinkability
 - **Delay** finalization indefinitely
+
+Administrative/deployment trust is also centralized: the deployment owner is an unremovable coordinator, there is no ownership-transfer function, and configured verifier/contract addresses are checked for nonzero rather than code identity. These are external provenance and operator assumptions.
 
 The earlier version of this document claimed "omission or manipulation is detectable via on-chain verification artifacts" and "even a malicious coordinator cannot learn individual vote choices". Both claims were false for this implementation and are retracted.
 
@@ -94,15 +100,18 @@ Both proving keys were produced with a **single phase-2 contribution by the auth
 | Property | Status |
 |----------|--------|
 | Vote choice hidden from chain observers | Enforced |
-| Voter EOA hidden from chain observers | Enforced |
+| Participant EOA absent from intended relayed vote data | Enforced by the contract interface/relayer path; the contract does not require coordinator and participant addresses to differ |
 | Nullifier single-use (per voteId) | Enforced on-chain |
 | One vote per voter | **Not enforced** (nullifier not circuit-bound to the leaf; holds for standard clients only) |
 | Tallied ciphertexts = proof-committed ciphertexts | Enforced (server + circuit hash binding) |
-| Tally = correct sum + decryption of a committed batch | Enforced (proof) |
+| Aggregate group element = homomorphic sum/decryption representation of a committed batch | Enforced (proof) |
+| Unique canonical integer tally | **Not enforced** (scalar alias/range gap) |
 | Ciphertext point validity | **Server-mitigated** (rejected before relay; not circuit-constrained) |
 | Plaintext in `{0, weight}`, one choice | **Not enforced** |
 | Committed weight = snapshot weight | **Not enforced** (server-gated only) |
 | Tallied batch = canonical submitted set | **Not enforced** |
+| Tally proof bound to voteId/deployment | **Not enforced** (cross-vote/deployment replay possible when state checks pass) |
+| Dummy contents/count are canonical | **Not enforced** (only one post-close registration call is recorded) |
 | Aggregate-only decryption by coordinator | **Not enforced** (norm) |
 | Censorship resistance | **Not provided** |
 | Receipt-freeness | **Not provided** (intentional) |
