@@ -132,7 +132,7 @@ The Demo is an **honest-client flow demonstration**, not an adversarially secure
 - `voterID = Poseidon(voteId, pubkeyCommit, secret_voterid)`
 - `nullifier = Poseidon(secret_nullifier, voteId)`
 
-**Privacy after this point — stated precisely:** `leaf_data` stores no explicit EOA column, and the intended on-chain flow records no participant EOA. The server nevertheless stores EOAs in `snapshot` and can correlate `/weight` with `/leaf` through timing, source/session context, insertion/order information and logs; Demo additionally prints new EOAs to stdout. The unlinkability guarantee is therefore **against chain observers**. Against the server, schema separation is a data-minimization practice, not a cryptographic or guaranteed storage unlinkability property.
+**Privacy after this point — stated precisely:** `leaf_data` stores no explicit EOA column, and the intended on-chain flow records no participant EOA. The server nevertheless stores EOAs in `snapshot` and can correlate `/weight` with `/leaf` through timing, source/session context, insertion/order information and logs. Demo prints new EOAs to stdout only in masked form (first 6 and last 4 characters) and deletes a voteId's `snapshot` rows once its tally is finalized on-chain; what process or infrastructure logs retain is a separate matter. The unlinkability guarantee is therefore **against chain observers**. Against the server, schema separation is a data-minimization practice, not a cryptographic or guaranteed storage unlinkability property.
 
 ---
 
@@ -392,7 +392,7 @@ The table below states visibility per item. "Cannot trace back" claims are **rel
 
 ### What the server could still learn
 
-- **EOA↔leaf correlation at registration time**: `/weight` (EOA) and `/leaf` (leaf) arrive close together with matching timing/source/session context. There is no direct EOA column in `leaf_data`, but this is not proof that no correlatable record persists. Demo registration stores the EOA in `snapshot` and emits each newly registered EOA to server stdout; infrastructure logs may retain additional timing/source data. This is a data-minimization practice, not a cryptographic guarantee.
+- **EOA↔leaf correlation at registration time**: `/weight` (EOA) and `/leaf` (leaf) arrive close together with matching timing/source/session context. There is no direct EOA column in `leaf_data`, but this is not proof that no correlatable record persists. Demo registration stores the EOA in `snapshot` until the voteId's tally is finalized on-chain (`submitTally_demo.js` then deletes those rows) and writes only a masked form of each new EOA to server stdout; infrastructure logs may retain additional timing/source data. This is a data-minimization practice, not a cryptographic guarantee.
 - **Vote timing**: the server sees when each ciphertext arrives.
 
 ### Coordinator Knowledge
@@ -657,7 +657,7 @@ Consequences, stated plainly: a **malicious voter** with a modified client could
 ### 17.4 Trust Assumptions
 
 1. **Single coordinator holds the ElGamal key** — could decrypt individual ciphertexts (norm, not enforcement; threshold ElGamal planned)
-2. **Server sees registration sessions and EOA records** — could correlate EOA↔leaf via snapshot data, timing/IP/token issuance and logs (§11)
+2. **Server sees registration sessions and EOA records** — could correlate EOA↔leaf via snapshot data, timing/IP/token issuance and logs (§11). Demo keeps snapshot EOAs only until the voteId's tally is finalized on-chain and masks them in stdout; process/infrastructure log retention is separate
 3. **Relayer submission** — the coordinator can censor votes by refusing to relay them (on-chain evidence of inclusion exists only for votes it submits)
 4. **Coordinator lifecycle/root authority** — any authorized coordinator can accept arbitrary roots, close a vote early and irreversibly, and set the dummy-registration flag with unvalidated hashes; accepted historical roots are not revocable
 5. **Permanent owner authority** — the deployment owner is an unremovable coordinator and there is no ownership-transfer function

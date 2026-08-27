@@ -38,7 +38,7 @@ This document is a high-level orientation. The precise specification — circuit
 - Relays all transactions; pays all gas
 - After closing: homomorphically sums ciphertexts, decrypts the aggregate, generates the tally proof
 
-The server stores EOA→weight records in `snapshot`; `leaf_data` has no explicit EOA column. Timing/session/order/logs can still correlate EOA↔leaf, and Demo prints new registration EOAs to stdout. The unlinkability guarantee is against chain observers, not the server.
+The server stores EOA→weight records in `snapshot`; `leaf_data` has no explicit EOA column. Timing/session/order/logs can still correlate EOA↔leaf. Demo masks new registration EOAs in stdout and deletes a voteId's `snapshot` rows once its tally is finalized on-chain (process/infrastructure logs are separate). The unlinkability guarantee is against chain observers, not the server.
 
 ### 3. Smart contracts (Ethereum Sepolia)
 

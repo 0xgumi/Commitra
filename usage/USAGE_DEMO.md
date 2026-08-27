@@ -105,6 +105,8 @@ node src/lib/tally_demo.js 1
 ```bash
 node src/lib/submitTally_demo.js 1
 ```
+Right after `finalizeTally` succeeds (receipt and result confirmed), the script deletes the voteId's `snapshot` rows (the registration EOAs) and prints the deleted count — after finalization the server keeps no EOAs for that vote. A failed delete only warns (the on-chain result is already final); the already-finalized refusal path deletes nothing. New-registration lines on server stdout show the address masked (`0x1e4c…2c01`). Process and infrastructure log retention is a separate matter.
+
 
 ---
 

@@ -2,7 +2,23 @@ require('dotenv').config({ path: '.env.demo', quiet: true });
 
 const path = require("path");
 const fs = require("fs");
+const Database = require("better-sqlite3");
 const { tallyContract } = require("../config/onchain");
+
+const DEMO_DB_PATH = path.join(__dirname, "../db/voting_demo.db");
+
+// Demo only: once the tally is final on-chain the server has no further use for
+// the registration EOAs, so the voteId's snapshot rows are removed. Process and
+// infrastructure logs are outside this function's reach.
+function purgeSnapshotRows(voteId, dbPath = DEMO_DB_PATH) {
+  const db = new Database(dbPath);
+  try {
+    const info = db.prepare("DELETE FROM snapshot WHERE voteId = ?").run(voteId);
+    return info.changes;
+  } finally {
+    db.close();
+  }
+}
 
 async function submitTally(voteId) {
   if (!voteId) {
@@ -47,6 +63,14 @@ async function submitTally(voteId) {
   console.log("NO:", no.toString());
   console.log("ABSTAIN:", abstain.toString());
 
+  // 3. 확정 후 EOA 보관 종료 (실패해도 온체인 결과는 이미 확정)
+  try {
+    const deleted = purgeSnapshotRows(voteId);
+    console.log(`✓ snapshot rows deleted for voteId ${voteId}: ${deleted}`);
+  } catch (err) {
+    console.warn(`⚠ snapshot rows not deleted (${err.message}); run manually: DELETE FROM snapshot WHERE voteId = ${voteId};`);
+  }
+
   return { yes, no, abstain };
 }
 
@@ -60,4 +84,4 @@ if (require.main === module) {
     });
 }
 
-module.exports = { submitTally };
+module.exports = { submitTally, purgeSnapshotRows };

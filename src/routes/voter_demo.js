@@ -689,7 +689,8 @@ router.post("/weight", (req, res) => {
         "INSERT OR IGNORE INTO snapshot (voteId, eoa, weight) VALUES (?, ?, ?)"
       ).run(voteId, lowerEoa, weight);
       
-      console.log(`✓ Demo: New EOA registered with weight ${weight}:`, lowerEoa);
+      // Masked on purpose: the full EOA is in the DB, but must not land in process logs
+      console.log(`✓ Demo: New EOA registered with weight ${weight}: ${lowerEoa.slice(0, 6)}…${lowerEoa.slice(-4)}`);
       const leafAdmissionToken = issueLeafAdmissionToken(voteId);
       return res.json({
         status: "ok",

@@ -38,7 +38,7 @@ Consequences, stated plainly: a malicious **voter** with a modified client could
 
 - **Single coordinator** holds the ElGamal key: aggregate-only decryption is a protocol norm, not an enforced property.
 - **Relayer censorship**: the coordinator can decline to relay a vote.
-- **Server-side registration**: `leaf_data` has no explicit EOA column, but the server stores EOA snapshot records and can correlate registration via timing/session/order/logs (Demo also prints new EOAs to stdout). Unlinkability claims are scoped to **chain observers**.
+- **Server-side registration**: `leaf_data` has no explicit EOA column, but the server stores EOA snapshot records and can correlate registration via timing/session/order/logs. Demo masks new EOAs in stdout and deletes a voteId's `snapshot` rows once its tally is finalized on-chain; process/infrastructure log retention is separate. Unlinkability claims are scoped to **chain observers**.
 - **Trusted setup**: both proving keys were produced with a **single phase-2 contribution** by the author. Soundness rests on that contribution's randomness being discarded. See [`docs/PROVENANCE.md`](docs/PROVENANCE.md).
 - **Not receipt-free** (intentional scope): a voter can reveal ElGamal randomness to prove their vote. Anti-collusion is out of scope; this design prioritizes limiting what everyone — operator included — learns.
 

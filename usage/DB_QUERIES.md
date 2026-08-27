@@ -23,7 +23,7 @@ alias db-demo="sqlite3 src/db/voting_demo.db"
 ```bash
 sqlite3 src/db/voting.db ".tables"                              # table list
 sqlite3 src/db/voting.db "SELECT * FROM active_votes;"          # active votes
-sqlite3 src/db/voting.db "SELECT * FROM snapshot;"              # voter list
+sqlite3 src/db/voting.db "SELECT * FROM snapshot;"              # voter list (Demo: rows of a finalized voteId are deleted by submitTally_demo.js)
 sqlite3 src/db/voting.db "SELECT * FROM leaf_data;"             # leaves + merkle paths
 sqlite3 src/db/voting.db "SELECT * FROM root_history;"          # root history
 sqlite3 src/db/voting.db "SELECT * FROM used_nullifiers;"       # used nullifiers

@@ -73,7 +73,7 @@ The coordinator **can, currently**:
 - **Replay a tally proof across voteIds/deployments.** voteId, chainId and contract identity are absent from tally public signals. Per-voteId storage prevents only a second write to the same key; it does not bind the proof to that key
 - **Publish a non-canonical tally scalar.** The circuit checks equality as a BabyJub group element, while neither circuit nor contract bounds the results to a unique canonical integer/tally range
 - **Censor**: decline to relay a vote (the vote then never appears on-chain at all)
-- **Correlate EOA↔leaf at registration time** via snapshot records, timing, source address, token order and logs. Demo registration also prints new EOAs to server stdout; the absence of an EOA column in `leaf_data` is not cryptographic unlinkability
+- **Correlate EOA↔leaf at registration time** via snapshot records, timing, source address, token order and logs. Demo writes new EOAs to server stdout only in masked form and deletes a voteId's `snapshot` rows once its tally is finalized on-chain (process/infrastructure logs are separate); the absence of an EOA column in `leaf_data` is not cryptographic unlinkability
 - **Delay** finalization indefinitely
 
 Administrative/deployment trust is also centralized: the deployment owner is an unremovable coordinator, there is no ownership-transfer function, and configured verifier/contract addresses are checked for nonzero rather than code identity. These are external provenance and operator assumptions.
