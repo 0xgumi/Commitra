@@ -2,6 +2,8 @@
 
 How to build the client, run the server, recompile the circuits, and check the published artifacts against the deployed system.
 
+Run every command in this document from the repository root. The dotenv file names and the build/output paths below are resolved relative to the current working directory.
+
 ---
 
 ## Toolchain
@@ -10,13 +12,15 @@ How to build the client, run the server, recompile the circuits, and check the p
 |------|---------|
 | Node.js | 18 (`.nvmrc`) |
 | circom | 2.1.4 (circuit pragma) |
-| snarkjs | 0.6.x (`package.json`) |
+| snarkjs | 0.6.11 (`package.json`) |
 | circomlib | 2.0.5 (npm dependency, GPL-3.0) |
 
 ```bash
-npm install
+npm ci
 npm test          # regression tests (ciphertext point validation)
 ```
+
+`npm ci` runs dependency install scripts. `better-sqlite3` uses a prebuilt binary when available and otherwise falls back to `node-gyp`; `blake-hash` has no `darwin-arm64` prebuild and compiles with `node-gyp` on Apple Silicon; `esbuild` runs its postinstall binary check. A working C/C++ toolchain may therefore be required. npm may also report vulnerabilities in transitive dependencies; the install summary alone does not identify them as direct-dependency findings.
 
 ---
 
@@ -25,9 +29,10 @@ npm test          # regression tests (ciphertext point validation)
 ```bash
 npm run build        # Product bundle  → public/dist/bundle.js
 npm run build:demo   # Demo bundle     → public/dist/bundle_demo.js
+npm run build:all    # Product, then Demo
 ```
 
-Vite configs: `vite.config.mjs`, `vite.config.demo.mjs`. The client loads `public/vote.wasm` and `public/vote_final.zkey` for browser-side proving — verify them against [`PROVENANCE.md`](PROVENANCE.md) hashes.
+Vite configs: `vite.config.mjs`, `vite.config.demo.mjs`. Both use `public/dist` as `outDir` with `emptyOutDir: false`, so Vite may warn that `publicDir` and `outDir` overlap; this is expected here. Alongside the two bundles, the build copies `index*.html`, `vote.wasm`, and `vote_final.zkey` from `public/` into `public/dist/`. The browser loads the source artifacts from `public/`; verify them against [`PROVENANCE.md`](PROVENANCE.md) hashes.
 
 ---
 
@@ -40,11 +45,17 @@ node src/server.js        # Product server, port 3000 (server_demo.js → port 4
 
 Required environment (`.env` / `.env.demo` — names only, set your own values): `RPC_URL`, `OWNER_PRIVATE_KEY`, `COORDINATOR_PRIVATE_KEYS`, `VOTING_CONTRACT_ADDRESS`, `TALLY_CONTRACT_ADDRESS`, `COORDINATOR_PUBKEY`, `LEAF_TOKEN_SECRET`, `INTERNAL_API_TOKEN`, `BASIC_AUTH_PASSWORD` (optional).
 
-The tally scripts load only their dedicated file, not the server file: Product tallying needs both `COORDINATOR_PUBKEY` and `COORDINATOR_PRIVKEY` in `.env.tally`; Demo tallying needs both in `.env.demo.tally`. Before the first tally in a fresh clone, create the ignored output directories:
+`LEAF_TOKEN_TTL_SEC` is optional and defaults to 600 seconds.
+
+Tally entrypoints layer environment files without overwriting values loaded earlier. Product loads `.env.tally` first and then obtains remaining RPC/contract/wallet configuration from `.env` through `onchain.js`. Demo loads `.env.demo.tally`, then `.env.demo`, then imports `onchain.js`; the final default `.env` load leaves the already-set Demo values unchanged. The dedicated tally files contain `COORDINATOR_PUBKEY` and `COORDINATOR_PRIVKEY`; the matching server file supplies the remaining variables, including `RPC_URL` and `TALLY_CONTRACT_ADDRESS`.
+
+Before the first tally in a fresh clone, create the ignored output directories:
 
 ```bash
 mkdir -p tally_outputs/product tally_outputs/demo
 ```
+
+Download `tally_final.zkey` from the repository's GitHub Release, verify it against the SHA-256 value in [`PROVENANCE.md`](PROVENANCE.md), and place it at `circuits/tally/tally_final.zkey` (gitignored). `src/lib/tally.js` and `src/lib/tally_demo.js` read that exact path.
 
 Full lifecycle operation (snapshot → votes → finalize → tally → submit): step-by-step guides in [`../usage/`](../usage/).
 
@@ -62,7 +73,7 @@ circom circuits/tally/tally.circom --r1cs --wasm -l . -o build/tally
 
 Notes:
 
-- The `include` paths resolve against `node_modules/circomlib` (installed by `npm install`)
+- The `include` paths resolve against `node_modules/circomlib` (installed by `npm ci`)
 - Byte-identical `.wasm` output requires the same circom version (2.1.4); with a different version, compare circuits at the constraint level instead
 - Tally circuit is compiled for a fixed batch of `nVoters = 100` (~101k constraints, 2^19 powers-of-tau)
 
@@ -75,9 +86,11 @@ Notes:
 To confirm the on-chain verifiers correspond to these circuits and zkeys:
 
 ```bash
-snarkjs zkey export verificationkey vote_final.zkey vote_vkey.json
-snarkjs zkey export solidityverifier vote_final.zkey voteVerifier.sol
-# likewise for tally_final.zkey
+mkdir -p build/verification
+npx snarkjs zkey export verificationkey public/vote_final.zkey build/verification/vote_vkey.json
+npx snarkjs zkey export solidityverifier public/vote_final.zkey build/verification/voteVerifier.sol
+npx snarkjs zkey export verificationkey circuits/tally/tally_final.zkey build/verification/tally_vkey.json
+npx snarkjs zkey export solidityverifier circuits/tally/tally_final.zkey build/verification/tallyVerifier.sol
 ```
 
 Compare the generated verifier against [`../contracts/voteVerifier.sol`](../contracts/voteVerifier.sol) / [`../contracts/tallyVerifier.sol`](../contracts/tallyVerifier.sol), and against the bytecode deployed at the verifier addresses (readable via each main contract's `verifier()` view; addresses in the [README](../README.md#deployments-ethereum-sepolia)).

@@ -12,7 +12,9 @@ const db = new Database(dbPath);
 
 // Coordinator key from environment
 require('dotenv').config({ path: '.env.demo.tally', quiet: true });
-// onchain.js loads .env itself; requiring it after the demo env keeps the demo values
+// Keep tally-only key material, then fill Demo RPC/contract/wallet settings.
+// dotenv does not overwrite values already loaded from .env.demo.tally.
+require('dotenv').config({ path: '.env.demo', quiet: true });
 const { ownerTallyContract } = require("../config/onchain");
 
 const coordinatorPubkey = JSON.parse(process.env.COORDINATOR_PUBKEY);

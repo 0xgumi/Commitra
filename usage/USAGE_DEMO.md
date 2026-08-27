@@ -94,6 +94,8 @@ node scripts/finalize_demo.js 1
 
 ## 7. Compute tally + generate proof (per voteId)
 
+Before the first tally, download `tally_final.zkey` from the GitHub Release, verify its SHA-256 against `docs/PROVENANCE.md`, and place it at `circuits/tally/tally_final.zkey` (gitignored). `src/lib/tally*.js` reads that path.
+
 ```bash
 mkdir -p tally_outputs/demo  # once per fresh clone
 node src/lib/tally_demo.js 1
@@ -127,6 +129,7 @@ node src/server_demo.js
 # terminal 2 — after participants finish
 mkdir -p tally_outputs/demo
 node scripts/finalize_demo.js 1
+# first tally: Release asset → verify PROVENANCE hash → circuits/tally/tally_final.zkey
 node src/lib/tally_demo.js 1
 node src/lib/submitTally_demo.js 1
 ```

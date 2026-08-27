@@ -3,6 +3,7 @@ node_modules/
 .env.*
 *.db
 public/dist/
+build/
 tally_outputs/
 recovery_logs/
 cache/
