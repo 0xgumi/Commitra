@@ -35,11 +35,10 @@ Notes:
 ## 1. Initialize the database
 
 ```bash
-rm src/db/voting.db
 node src/db/init.js
 ```
 
-> ⚠️ Deleting the DB does **not** reset on-chain state — voteIds, valid roots, and used nullifiers persist in the contracts. After a DB reset, use fresh voteIds (or fresh contract deployments); reusing an old voteId against a wiped DB will desync server and chain.
+> ⚠️ Do not delete an existing DB unless you are also deploying fresh contracts. Deleting the DB does **not** reset on-chain state — voteIds, valid roots, and used nullifiers persist in the contracts, and every voteId the DB knew becomes on-chain-only; the snapshot scripts then refuse it (§2). `init` is safe to re-run (it only creates missing tables).
 
 ## 2. Create snapshots (per voteId)
 
@@ -105,10 +104,10 @@ node src/lib/submitTally.js 1
 The server is a foreground process. Run it in a dedicated terminal and leave it running while participants vote; run lifecycle commands in another terminal.
 
 ```bash
-# terminal 1 — one-time setup, then server
-rm src/db/voting.db
+# terminal 1 — one-time setup, then server (do not delete an existing DB; see §1)
 node src/db/init.js
 node scripts/setup.js
+node scripts/listVoteIds.js product check 1       # must print "free" for the voteId in the JSON (createSnapshot refuses on-chain ids unknown to this DB and ids the DB marks closed)
 node scripts/createSnapshot.js snapshots/vote1.json
 npm run build
 node src/server.js

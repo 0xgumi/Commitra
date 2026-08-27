@@ -43,11 +43,10 @@ On expiry or verification failure, `/leaf` is rejected; the user can press **Reg
 ## 1. Initialize the database
 
 ```bash
-rm src/db/voting_demo.db
 node src/db/init_demo.js
 ```
 
-> ⚠️ Deleting the DB does **not** reset on-chain state — voteIds, valid roots, and used nullifiers persist in the contracts. After a DB reset, use fresh voteIds (or fresh contract deployments); reusing an old voteId against a wiped DB will desync server and chain.
+> ⚠️ Do not delete an existing DB unless you are also deploying fresh contracts. Deleting the DB does **not** reset on-chain state — voteIds, valid roots, and used nullifiers persist in the contracts, and every voteId the DB knew becomes on-chain-only; the snapshot scripts then refuse it (§2). `init` is safe to re-run (it only creates missing tables).
 
 ## 2. Create votes (per voteId)
 
@@ -105,8 +104,8 @@ node src/lib/tally_demo.js 1
 ```bash
 node src/lib/submitTally_demo.js 1
 ```
-Right after `finalizeTally` succeeds (receipt and result confirmed), the script deletes the voteId's `snapshot` rows (the registration EOAs) and prints the deleted count — after finalization the server keeps no EOAs for that vote. A failed delete only warns (the on-chain result is already final); the already-finalized refusal path deletes nothing. New-registration lines on server stdout show the address masked (`0x1e4c…2c01`). Process and infrastructure log retention is a separate matter.
 
+Right after `finalizeTally` succeeds (receipt and result confirmed), the script deletes the voteId's `snapshot` rows (the registration EOAs) and prints the deleted count — after finalization the server keeps no EOAs for that vote. A failed delete only warns (the on-chain result is already final); the already-finalized refusal path deletes nothing. New-registration lines on server stdout show the address masked (`0x1e4c…2c01`). Process and infrastructure log retention is a separate matter.
 
 ---
 
@@ -115,10 +114,10 @@ Right after `finalizeTally` succeeds (receipt and result confirmed), the script 
 The server is a foreground process. Run it in a dedicated terminal and leave it running while participants vote; run lifecycle commands in another terminal.
 
 ```bash
-# terminal 1 — one-time setup, then server
-rm src/db/voting_demo.db
+# terminal 1 — one-time setup, then server (do not delete an existing DB; see §1)
 node src/db/init_demo.js
 node scripts/setup_demo.js
+node scripts/listVoteIds.js demo check 1          # must print "free" (createSnapshot refuses on-chain ids unknown to this DB and ids the DB marks closed)
 node scripts/createSnapshot_demo.js 1 "Demo Vote #1"
 npm run build:demo
 node src/server_demo.js
